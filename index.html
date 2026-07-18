@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Радиальное семейное дерево — GEDCOM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar sb">
+        <header class="sidebar__header">
+          <div class="sidebar__title-row">
+            <h1 data-i18n="app.heading">Радиальное семейное дерево</h1>
+            <div class="lang-switch" id="langSwitch">
+              <button type="button" data-lang="en">EN</button>
+              <button type="button" data-lang="ru">RU</button>
+            </div>
+          </div>
+          <p data-i18n="app.subtitle">Визуализация GEDCOM</p>
+          <div class="legend">
+            <span><i class="legend__swatch legend__swatch--male"></i><span data-i18n="legend.male">Мужчины</span></span>
+            <span><i class="legend__swatch legend__swatch--female"></i><span data-i18n="legend.female">Женщины</span></span>
+          </div>
+        </header>
+
+        <div class="data-actions">
+          <label class="btn btn--file"><span data-i18n="actions.load">Загрузить GEDCOM</span>
+            <input type="file" id="fileInput" accept=".ged,.gedcom,.txt" />
+          </label>
+          <button class="btn" id="sampleBtn" type="button" data-i18n="actions.sample">Пример</button>
+        </div>
+
+        <div class="field">
+          <div class="field__label" data-i18n="fields.rootFamily">Корневая семья</div>
+          <div class="select-wrap">
+            <select id="rootSelect" disabled></select>
+          </div>
+        </div>
+
+        <div id="settingsPanel"></div>
+
+        <div class="field">
+          <div class="field__label" data-i18n="fields.canvasSize">Размер полотна</div>
+          <div class="select-wrap">
+            <select id="printSizeSelect"></select>
+          </div>
+          <button class="btn btn--primary" id="exportBtn" type="button" data-i18n="actions.export">Скачать JPEG</button>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <div id="chart"></div>
+        <footer class="stage__bar">
+          <span id="status" role="status"></span>
+          <button class="link-btn" id="fitBtn" type="button" data-i18n="actions.fit">Вписать в экран</button>
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
