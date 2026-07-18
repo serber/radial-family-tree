@@ -87,6 +87,51 @@ Notes:
 - No backend, no database, nothing else to run: GEDCOM files are parsed
   entirely in the browser and never leave the client.
 
+### SEO files
+
+The production site is `https://gedtree.ru`. Everything search engines
+need ships with the build — `public/` is copied verbatim into `dist/`,
+so nginx serves these without extra configuration:
+
+- `public/robots.txt` — allows all crawlers, points to the sitemap;
+- `public/sitemap.xml` — single-URL sitemap (update `lastmod` on
+  meaningful releases);
+- `public/og-image.jpg` — 1200×1200 Open Graph preview (source:
+  `docs/images/family-tree-square.jpg`, downscaled);
+- `index.html` — meta description/keywords, canonical, hreflang,
+  Open Graph, Twitter card and JSON-LD (`WebApplication`) markup, all
+  hard-coded to the `gedtree.ru` origin. If the domain ever changes,
+  update the absolute URLs in `index.html`, `robots.txt`,
+  `sitemap.xml` and `scripts/enPagePlugin.ts`.
+
+The site is bilingual and both languages are indexable:
+
+- `/` — Russian page (`dist/index.html`, built from the source
+  `index.html`);
+- `/en/` — English page (`dist/en/index.html`), generated at build time
+  by `scripts/enPagePlugin.ts` from the built Russian page: it swaps the
+  head metadata for the English set and resolves every `data-i18n`
+  element against `messages/en.json`, so there is no second HTML source
+  to keep in sync. The plugin throws if the head structure changed and a
+  replacement no longer matches — fix the plugin in the same commit.
+- Both pages and the sitemap carry a matching
+  `hreflang ru / en / x-default` set; the runtime picks the initial UI
+  language from the URL (`/en/` forces English), then from the stored
+  preference, then from `navigator.language`.
+
+Add a no-cache rule for the English entry point next to the root one:
+
+```nginx
+    location = /en/index.html {
+        add_header Cache-Control "no-cache";
+    }
+```
+
+After deploying, register the site in
+[Google Search Console](https://search.google.com/search-console) and
+[Yandex.Webmaster](https://webmaster.yandex.ru/) and submit the sitemap
+there — that is a manual, one-time step.
+
 ## 2. Updating to a new version
 
 After uploading the new code into the server folder, reinstall
