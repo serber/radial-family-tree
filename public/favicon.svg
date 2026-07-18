@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#efece4"/>
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#d8d2c2" stroke-width="1" stroke-dasharray="2 3"/>
+  <g stroke="#b6ad9c" stroke-width="1.5">
+    <line x1="32" y1="32" x2="53" y2="32"/>
+    <line x1="32" y1="32" x2="46.85" y2="46.85"/>
+    <line x1="32" y1="32" x2="32" y2="53"/>
+    <line x1="32" y1="32" x2="17.15" y2="46.85"/>
+    <line x1="32" y1="32" x2="11" y2="32"/>
+    <line x1="32" y1="32" x2="17.15" y2="17.15"/>
+    <line x1="32" y1="32" x2="32" y2="11"/>
+    <line x1="32" y1="32" x2="46.85" y2="17.15"/>
+  </g>
+  <g stroke-width="1.4">
+    <circle cx="53" cy="32" r="4.6" fill="#d8e7f8" stroke="#5b8fc9"/>
+    <circle cx="46.85" cy="46.85" r="4.6" fill="#fadbe7" stroke="#d16a94"/>
+    <circle cx="32" cy="53" r="4.6" fill="#d8e7f8" stroke="#5b8fc9"/>
+    <circle cx="17.15" cy="46.85" r="4.6" fill="#fadbe7" stroke="#d16a94"/>
+    <circle cx="11" cy="32" r="4.6" fill="#d8e7f8" stroke="#5b8fc9"/>
+    <circle cx="17.15" cy="17.15" r="4.6" fill="#fadbe7" stroke="#d16a94"/>
+    <circle cx="32" cy="11" r="4.6" fill="#d8e7f8" stroke="#5b8fc9"/>
+    <circle cx="46.85" cy="17.15" r="4.6" fill="#fadbe7" stroke="#d16a94"/>
+  </g>
+  <g>
+    <path d="M 22.5 32 A 9.5 9.5 0 0 1 41.5 32 Z" fill="#d8e7f8"/>
+    <path d="M 22.5 32 A 9.5 9.5 0 0 0 41.5 32 Z" fill="#fadbe7"/>
+    <circle cx="32" cy="32" r="9.5" fill="none" stroke="#0f766e" stroke-width="2.4"/>
+  </g>
+</svg>

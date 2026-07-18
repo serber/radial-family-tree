@@ -236,7 +236,7 @@ export class TreeRenderer {
       .attr('height', (d) => d.card.height)
       .attr('rx', settings.cornerRadius)
       .attr('fill', (d) => sexColors(d.card.person.sex, settings).fill)
-      .attr('stroke', (d) => sexColors(d.card.person.sex, settings).accent)
+      .attr('stroke', (d) => sexColors(d.card.person.sex, settings).border)
       .attr('stroke-width', 1);
 
     cardSel
@@ -326,7 +326,7 @@ export class TreeRenderer {
       .select<SVGCircleElement>('circle.outline')
       .attr('r', r)
       .attr('fill', 'none')
-      .attr('stroke', sexColors(primary.sex, settings).accent)
+      .attr('stroke', sexColors(primary.sex, settings).border)
       .attr('stroke-width', 1.2);
 
     const fontSize = Math.max(settings.fontSize, r / 5);

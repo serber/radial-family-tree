@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Radial Family Tree — GEDCOM",
+    "title": "Radial Family Tree — GEDCOM Visualizer",
     "heading": "Radial Family Tree",
     "subtitle": "GEDCOM visualization"
   },
@@ -38,6 +38,8 @@
     "coreScale": "Scale of generations 1–2",
     "maleColor": "Card color — men",
     "femaleColor": "Card color — women",
+    "autoCardBorder": "Borders match the fill",
+    "cardBorderColor": "Card border color",
     "showBothSpouses": "Show both spouses",
     "lineWidth": "Line width",
     "lineColor": "Line color",

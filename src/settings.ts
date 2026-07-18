@@ -24,6 +24,10 @@ export interface Settings {
   lineColor: string;
   maleColor: string;
   femaleColor: string;
+  /** Derive the card outline from the fill (accentFor); overrides cardBorderColor. */
+  autoCardBorder: boolean;
+  /** Card outline color, used when autoCardBorder is off. */
+  cardBorderColor: string;
   /** Background color of the drawing canvas (screen and export). */
   canvasColor: string;
   /** Extra scale for generations 1–2 (makes the core of the poster readable). */
@@ -49,6 +53,8 @@ export const defaultSettings: Settings = {
   lineColor: '#b7bccb',
   maleColor: '#d8e7f8',
   femaleColor: '#fadbe7',
+  autoCardBorder: true,
+  cardBorderColor: '#8a8579',
   canvasColor: '#f7f4ee',
   coreScale: 1,
   showBothSpouses: true,

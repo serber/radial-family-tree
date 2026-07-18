@@ -19,6 +19,9 @@ const formatterCache = new Map<string, IntlMessageFormat>();
 const listeners = new Set<() => void>();
 
 function resolveInitialLocale(): Locale {
+  // /en/ is the crawlable English entry point (dist/en/index.html, generated
+  // at build time) — the URL wins over the stored preference.
+  if (location.pathname === '/en' || location.pathname.startsWith('/en/')) return 'en';
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === 'en' || stored === 'ru') return stored;
   return navigator.language?.toLowerCase().startsWith('ru') ? 'ru' : 'en';

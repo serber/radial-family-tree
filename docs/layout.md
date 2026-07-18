@@ -23,6 +23,14 @@ r(g) = r(g-1) + generationGap · decay^(g-2)   for g ≥ 2
 The decay (`< 1`) matters for large trees: outer generations are more
 numerous, and equal spacing would inflate the poster.
 
+Note that every step is also clamped from below by the anti-overlap
+minimum (see [Ring auto-expansion](#ring-auto-expansion)), so the decay
+only bites while `generationGap · decay^(g-2)` stays **above** that
+minimum. With the default settings (`generationGap` 100 < minimum ≈ 169)
+the clamp already dominates every step and changing the decay is a
+visible no-op — intentional: correctness of the picture wins over the
+requested spacing.
+
 ## Two tree passes
 
 ### 1. Bottom-up: angular weights
