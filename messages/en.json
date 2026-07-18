@@ -1,0 +1,79 @@
+{
+  "app": {
+    "title": "Radial Family Tree — GEDCOM",
+    "heading": "Radial Family Tree",
+    "subtitle": "GEDCOM visualization"
+  },
+  "legend": {
+    "male": "Men",
+    "female": "Women"
+  },
+  "actions": {
+    "load": "Load GEDCOM",
+    "sample": "Sample",
+    "export": "Download JPEG",
+    "fit": "Fit to view"
+  },
+  "fields": {
+    "rootFamily": "Root family",
+    "canvasSize": "Canvas size"
+  },
+  "groups": {
+    "geometry": "Geometry",
+    "cards": "Cards",
+    "lines": "Lines & background"
+  },
+  "controls": {
+    "firstRadius": "First ring radius",
+    "generationGap": "Generation spacing",
+    "generationDecay": "Radius decay",
+    "rootRadius": "Root node radius",
+    "familySpacing": "Family spacing",
+    "spouseGap": "Spouse gap",
+    "junctionDepth": "Child link offset",
+    "cardWidth": "Card width",
+    "cardHeight": "Card height",
+    "fontSize": "Font size",
+    "cornerRadius": "Corner radius",
+    "coreScale": "Scale of generations 1–2",
+    "maleColor": "Card color — men",
+    "femaleColor": "Card color — women",
+    "showBothSpouses": "Show both spouses",
+    "lineWidth": "Line width",
+    "lineColor": "Line color",
+    "canvasColor": "Canvas color",
+    "curvedLines": "Smooth lines",
+    "showRings": "Generation rings"
+  },
+  "printSizes": {
+    "a3": "A3 (300 DPI) — 4961 × 3508",
+    "a2": "A2 (300 DPI) — 7016 × 4961",
+    "a1": "A1 (300 DPI) — 9933 × 7016",
+    "a0": "A0 (300 DPI) — 14043 × 9933",
+    "fullhd": "Full HD — 1920 × 1080",
+    "4k": "4K UHD — 3840 × 2160",
+    "square": "Square — 2400 × 2400"
+  },
+  "status": {
+    "stats": "Shown: {people, plural, one {# person} other {# people}} · {families, plural, one {# family} other {# families}} · {generations, plural, one {# generation} other {# generations}}",
+    "rootOption": "{label} ({count, plural, one {# descendant} other {# descendants}})",
+    "exporting": "Exporting {size}…",
+    "saved": "Saved: {size}",
+    "exportError": "Export error: {message}",
+    "error": "Error: {message}",
+    "readFileError": "Failed to read the file",
+    "loadFirst": "Load a GEDCOM file or open the sample first"
+  },
+  "errors": {
+    "emptyGedcom": "Empty GEDCOM",
+    "noFamilies": "No families (FAM records) found in the file",
+    "familyNotFound": "Family {id} not found",
+    "canvasUnavailable": "Canvas 2D is unavailable",
+    "rasterizeFailed": "Failed to rasterize the SVG",
+    "jpegFailed": "Failed to encode the JPEG"
+  },
+  "life": {
+    "born": "b. {year}",
+    "died": "d. {year}"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "app": {
+    "title": "Радиальное семейное дерево — GEDCOM",
+    "heading": "Радиальное семейное дерево",
+    "subtitle": "Визуализация GEDCOM"
+  },
+  "legend": {
+    "male": "Мужчины",
+    "female": "Женщины"
+  },
+  "actions": {
+    "load": "Загрузить GEDCOM",
+    "sample": "Пример",
+    "export": "Скачать JPEG",
+    "fit": "Вписать в экран"
+  },
+  "fields": {
+    "rootFamily": "Корневая семья",
+    "canvasSize": "Размер полотна"
+  },
+  "groups": {
+    "geometry": "Геометрия",
+    "cards": "Карточки",
+    "lines": "Линии и фон"
+  },
+  "controls": {
+    "firstRadius": "Радиус первого круга",
+    "generationGap": "Расстояние между поколениями",
+    "generationDecay": "Сжатие радиуса",
+    "rootRadius": "Радиус корневого узла",
+    "familySpacing": "Расстояние между семьями",
+    "spouseGap": "Промежуток между супругами",
+    "junctionDepth": "Отступ линии к детям",
+    "cardWidth": "Ширина карточки",
+    "cardHeight": "Высота карточки",
+    "fontSize": "Размер шрифта",
+    "cornerRadius": "Скругление углов",
+    "coreScale": "Масштаб 1–2 поколений",
+    "maleColor": "Цвет карточек — мужчины",
+    "femaleColor": "Цвет карточек — женщины",
+    "showBothSpouses": "Показывать обоих супругов",
+    "lineWidth": "Толщина линий",
+    "lineColor": "Цвет линий",
+    "canvasColor": "Цвет полотна",
+    "curvedLines": "Гладкие линии",
+    "showRings": "Кольца поколений"
+  },
+  "printSizes": {
+    "a3": "A3 (300 DPI) — 4961 × 3508",
+    "a2": "A2 (300 DPI) — 7016 × 4961",
+    "a1": "A1 (300 DPI) — 9933 × 7016",
+    "a0": "A0 (300 DPI) — 14043 × 9933",
+    "fullhd": "Full HD — 1920 × 1080",
+    "4k": "4K UHD — 3840 × 2160",
+    "square": "Квадрат — 2400 × 2400"
+  },
+  "status": {
+    "stats": "Показано: {people, plural, one {# человек} few {# человека} many {# человек} other {# человека}} · {families, plural, one {# семья} few {# семьи} many {# семей} other {# семьи}} · {generations, plural, one {# поколение} few {# поколения} many {# поколений} other {# поколения}}",
+    "rootOption": "{label} (потомков: {count})",
+    "exporting": "Экспорт {size}…",
+    "saved": "Сохранено: {size}",
+    "exportError": "Ошибка экспорта: {message}",
+    "error": "Ошибка: {message}",
+    "readFileError": "Не удалось прочитать файл",
+    "loadFirst": "Сначала загрузите GEDCOM или откройте пример"
+  },
+  "errors": {
+    "emptyGedcom": "Пустой GEDCOM",
+    "noFamilies": "В файле не найдено ни одной семьи (записи FAM)",
+    "familyNotFound": "Семья {id} не найдена",
+    "canvasUnavailable": "Canvas 2D недоступен",
+    "rasterizeFailed": "Не удалось растеризовать SVG",
+    "jpegFailed": "Не удалось создать JPEG"
+  },
+  "life": {
+    "born": "род. {year}",
+    "died": "ум. {year}"
+  }
+}
