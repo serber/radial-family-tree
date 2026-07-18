@@ -30,11 +30,15 @@ function accentFor(fill: string): string {
 
 export function sexColors(
   sex: Sex,
-  settings: Pick<Settings, 'maleColor' | 'femaleColor'>
-): { fill: string; accent: string } {
-  if (sex === 'M') return { fill: settings.maleColor, accent: accentFor(settings.maleColor) };
-  if (sex === 'F') return { fill: settings.femaleColor, accent: accentFor(settings.femaleColor) };
-  return palette.unknown;
+  settings: Pick<Settings, 'maleColor' | 'femaleColor' | 'autoCardBorder' | 'cardBorderColor'>
+): { fill: string; accent: string; border: string } {
+  const base =
+    sex === 'M'
+      ? { fill: settings.maleColor, accent: accentFor(settings.maleColor) }
+      : sex === 'F'
+        ? { fill: settings.femaleColor, accent: accentFor(settings.femaleColor) }
+        : palette.unknown;
+  return { ...base, border: settings.autoCardBorder ? base.accent : settings.cardBorderColor };
 }
 
 export function lifeSpanLabel(birthYear: number | null, deathYear: number | null): string | null {

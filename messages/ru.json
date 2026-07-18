@@ -38,6 +38,8 @@
     "coreScale": "Масштаб 1–2 поколений",
     "maleColor": "Цвет карточек — мужчины",
     "femaleColor": "Цвет карточек — женщины",
+    "autoCardBorder": "Границы в тон заливки",
+    "cardBorderColor": "Цвет границ карточек",
     "showBothSpouses": "Показывать обоих супругов",
     "lineWidth": "Толщина линий",
     "lineColor": "Цвет линий",

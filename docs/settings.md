@@ -12,7 +12,7 @@ keys); the Russian variants are listed below next to each key.
 | --- | --- | --- | --- | --- |
 | Радиус первого круга | `firstRadius` | 60–400 | 140 | Radius of the first generation ring |
 | Расстояние между поколениями | `generationGap` | 80–400 | 100 | Base step between rings |
-| Сжатие радиуса | `generationDecay` | 50–100 % | 100 % | Gap multiplier per generation from the 3rd on; stored as 0.5–1.0 |
+| Сжатие радиуса | `generationDecay` | 50–100 % | 100 % | Gap multiplier per generation from the 3rd on; stored as 0.5–1.0. Compresses only the part of the gap above the anti-overlap minimum (≈ `cardWidth + junctionDepth + 8`, i.e. ~169 px at defaults) — with the default `generationGap` of 100 the rings already sit at that minimum and the slider has no visible effect until the generation spacing is raised above it (or the cards are made narrower) |
 | Радиус корневого узла | `rootRadius` | 20–200 | 120 | Size of the central disc with the root couple |
 | Расстояние между семьями | `familySpacing` | 0–160 | 10 | Arc reserve between neighboring blocks on a ring |
 | Промежуток между супругами | `spouseGap` | 0–40 | 0 | Gap between cards inside a family block; the marriage line is drawn in it at the inner edge (invisible at 0) |
@@ -29,6 +29,8 @@ keys); the Russian variants are listed below next to each key.
 | Масштаб 1–2 поколений | `coreScale` | 1.0–3.0× | 1.0× | Enlarges the poster core: cards, font and spacing of generations 1–2 |
 | Цвет карточек — мужчины | `maleColor` | color | `#d8e7f8` | Fill of male cards; the strip accent is derived automatically (darker, calmer) |
 | Цвет карточек — женщины | `femaleColor` | color | `#fadbe7` | Same for female cards |
+| Границы в тон заливки | `autoCardBorder` | on/off | on | When on, the card outline is derived from the fill (`accentFor`); when off, `cardBorderColor` is used |
+| Цвет границ карточек | `cardBorderColor` | color | `#8a8579` | Card and root-medallion outline; has effect only when `autoCardBorder` is off |
 | Показывать обоих супругов | `showBothSpouses` | on/off | on | When off, only the blood-line spouse remains |
 
 ## Lines and background («Линии и фон»)
@@ -62,8 +64,9 @@ types are checked by the compiler.
 Male/female card fills are configurable via the pickers (see above); the
 accent color of the blood-line strip is not chosen separately — it is derived
 from the fill (same hue, darker and less saturated, `accentFor` in
-`src/render/palette.ts`); the same derived color is used for the card stroke
-and the root medallion outline. The sidebar legend syncs with the chosen
+`src/render/palette.ts`). The card stroke and the root medallion outline use
+the same derived color while `autoCardBorder` is on, or the explicit
+`cardBorderColor` when it is off. The sidebar legend syncs with the chosen
 colors via the `--male`/`--female` CSS variables. Text and ring colors, plus
 the gray for unknown sex, are fixed in the `palette` constant there and are
 deliberately not exposed in the panel.

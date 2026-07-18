@@ -81,12 +81,14 @@ export const controlGroups: ControlGroup[] = [
       },
       { kind: 'color', key: 'maleColor', labelKey: 'controls.maleColor' },
       { kind: 'color', key: 'femaleColor', labelKey: 'controls.femaleColor' },
+      { kind: 'toggle', key: 'autoCardBorder', labelKey: 'controls.autoCardBorder' },
+      { kind: 'color', key: 'cardBorderColor', labelKey: 'controls.cardBorderColor' },
       { kind: 'toggle', key: 'showBothSpouses', labelKey: 'controls.showBothSpouses' }
     ]
   },
   {
     titleKey: 'groups.lines',
-    open: false,
+    open: true,
     controls: [
       { kind: 'range', key: 'lineWidth', labelKey: 'controls.lineWidth', min: 0.2, max: 6, step: 0.1 },
       { kind: 'color', key: 'lineColor', labelKey: 'controls.lineColor' },

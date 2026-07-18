@@ -4,7 +4,7 @@ GEDCOM file visualizer: the descendant tree is laid out on radial generation
 rings with the root couple at the center. Built with D3.js, Vite and
 TypeScript. The UI is bilingual (English/Russian) with a language switcher.
 
-![Radial family tree example](docs/images/family-tree-square.jpg)
+![Radial family tree example](docs/images/radial-family-tree-visualizer-main.jpg)
 
 *JPEG export of the bundled sample dataset (`examples/example-large.ged`,
 483 people, synthetic data): the root couple sits at the center, each ring
