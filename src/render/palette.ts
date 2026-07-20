@@ -30,7 +30,7 @@ function accentFor(fill: string): string {
 
 export function sexColors(
   sex: Sex,
-  settings: Pick<Settings, 'maleColor' | 'femaleColor' | 'autoCardBorder' | 'cardBorderColor'>
+  settings: Pick<Settings, 'maleColor' | 'femaleColor' | 'borderColor'>
 ): { fill: string; accent: string; border: string } {
   const base =
     sex === 'M'
@@ -38,7 +38,7 @@ export function sexColors(
       : sex === 'F'
         ? { fill: settings.femaleColor, accent: accentFor(settings.femaleColor) }
         : palette.unknown;
-  return { ...base, border: settings.autoCardBorder ? base.accent : settings.cardBorderColor };
+  return { ...base, border: settings.borderColor };
 }
 
 export function lifeSpanLabel(birthYear: number | null, deathYear: number | null): string | null {

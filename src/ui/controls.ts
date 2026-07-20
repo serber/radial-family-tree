@@ -43,58 +43,48 @@ export interface ControlGroup {
 
 export const controlGroups: ControlGroup[] = [
   {
-    titleKey: 'groups.geometry',
+    titleKey: 'groups.layout',
     open: true,
     controls: [
-      { kind: 'range', key: 'firstRadius', labelKey: 'controls.firstRadius', min: 60, max: 400 },
-      { kind: 'range', key: 'generationGap', labelKey: 'controls.generationGap', min: 80, max: 400 },
+      { kind: 'range', key: 'ringGap', labelKey: 'controls.ringGap', min: 60, max: 500 },
       {
         kind: 'range',
-        key: 'generationDecay', labelKey: 'controls.generationDecay',
-        min: 50,
-        max: 100,
+        key: 'ringGrowth', labelKey: 'controls.ringGrowth',
+        min: 100,
+        max: 160,
         toValue: (v) => v / 100,
         toDisplay: (v) => Math.round(v * 100),
         format: (v) => `${v}%`
       },
-      { kind: 'range', key: 'rootRadius', labelKey: 'controls.rootRadius', min: 20, max: 200 },
-      { kind: 'range', key: 'familySpacing', labelKey: 'controls.familySpacing', min: 0, max: 160 },
-      { kind: 'range', key: 'spouseGap', labelKey: 'controls.spouseGap', min: 0, max: 40 },
-      { kind: 'range', key: 'junctionDepth', labelKey: 'controls.junctionDepth', min: 0, max: 80 }
+      { kind: 'range', key: 'innerRingGap', labelKey: 'controls.innerRingGap', min: 60, max: 600 },
+      { kind: 'range', key: 'cardSpacing', labelKey: 'controls.cardSpacing', min: 0, max: 160 }
     ]
   },
   {
-    titleKey: 'groups.cards',
+    titleKey: 'groups.card',
     open: true,
     controls: [
-      { kind: 'range', key: 'cardWidth', labelKey: 'controls.cardWidth', min: 40, max: 320 },
-      { kind: 'range', key: 'cardHeight', labelKey: 'controls.cardHeight', min: 12, max: 140 },
+      { kind: 'range', key: 'cardLength', labelKey: 'controls.cardLength', min: 40, max: 320 },
+      { kind: 'range', key: 'cardThickness', labelKey: 'controls.cardThickness', min: 8, max: 140 },
       { kind: 'range', key: 'fontSize', labelKey: 'controls.fontSize', min: 6, max: 26 },
+      { kind: 'toggle', key: 'boldFont', labelKey: 'controls.boldFont' },
       { kind: 'range', key: 'cornerRadius', labelKey: 'controls.cornerRadius', min: 0, max: 30 },
-      {
-        kind: 'range',
-        key: 'coreScale', labelKey: 'controls.coreScale',
-        min: 1,
-        max: 3,
-        step: 0.1,
-        format: (v) => `${v.toFixed(1)}×`
-      },
-      { kind: 'color', key: 'maleColor', labelKey: 'controls.maleColor' },
-      { kind: 'color', key: 'femaleColor', labelKey: 'controls.femaleColor' },
-      { kind: 'toggle', key: 'autoCardBorder', labelKey: 'controls.autoCardBorder' },
-      { kind: 'color', key: 'cardBorderColor', labelKey: 'controls.cardBorderColor' },
+      { kind: 'toggle', key: 'tightSpouses', labelKey: 'controls.tightSpouses' },
       { kind: 'toggle', key: 'showBothSpouses', labelKey: 'controls.showBothSpouses' }
     ]
   },
   {
-    titleKey: 'groups.lines',
+    titleKey: 'groups.style',
     open: true,
     controls: [
-      { kind: 'range', key: 'lineWidth', labelKey: 'controls.lineWidth', min: 0.2, max: 6, step: 0.1 },
+      { kind: 'color', key: 'maleColor', labelKey: 'controls.maleColor' },
+      { kind: 'color', key: 'femaleColor', labelKey: 'controls.femaleColor' },
+      { kind: 'color', key: 'borderColor', labelKey: 'controls.borderColor' },
       { kind: 'color', key: 'lineColor', labelKey: 'controls.lineColor' },
-      { kind: 'color', key: 'canvasColor', labelKey: 'controls.canvasColor' },
-      { kind: 'toggle', key: 'curvedLines', labelKey: 'controls.curvedLines' },
-      { kind: 'toggle', key: 'showRings', labelKey: 'controls.showRings' }
+      { kind: 'range', key: 'lineWidth', labelKey: 'controls.lineWidth', min: 0.2, max: 6, step: 0.1 },
+      { kind: 'toggle', key: 'showRings', labelKey: 'controls.showRings' },
+      { kind: 'color', key: 'ringColor', labelKey: 'controls.ringColor' },
+      { kind: 'color', key: 'canvasColor', labelKey: 'controls.canvasColor' }
     ]
   }
 ];

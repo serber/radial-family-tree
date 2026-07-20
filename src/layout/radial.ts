@@ -23,7 +23,6 @@ export interface PlacedNode {
   radius: number;
   position: Point;
   rotationDeg: number;
-  scale: number;
   cards: CardSlot[];
   /** Start of the child-link stub: outer edge of the entry card (local frame). Null for root/leaves. */
   stubStart: Point | null;
@@ -45,9 +44,17 @@ export interface Layout {
   nodes: PlacedNode[];
   links: PlacedLink[];
   rings: number[];
+  /** Radius of the central root disc — derived, not a setting. */
+  rootRadius: number;
   /** Outer extent of the drawing, for fit-to-view and export. */
   maxRadius: number;
 }
+
+/** Length of the stub connecting a family block to its children fan-out. */
+const JUNCTION_DEPTH = 16;
+
+/** Inset of the marriage line from the cards' outer edge; the child stub starts here. */
+export const SPOUSE_LINE_INSET = 6;
 
 const polar = (angle: number, radius: number): Point => ({
   x: Math.cos(angle) * radius,
@@ -64,32 +71,26 @@ const localToGlobal = (origin: Point, angle: number, point: Point): Point => {
 };
 
 /**
- * Ring radii for each generation. The configured radii are a wish, not a law:
- * every gap is clamped so cards of neighbouring rings can never overlap
- * radially, and the first ring clears the root disc.
+ * Ring radii per generation, derived purely from the layout settings — card
+ * size deliberately plays no part, so resizing cards never moves a ring.
+ * The first two gaps come from `innerRingGap`; from ring 3 on each gap is the
+ * previous one times `ringGrowth`, because every further ring holds more cards.
  */
 function generationRadii(maxGeneration: number, settings: Settings): number[] {
-  const clearance = 8;
-  const scaleOf = (generation: number) => (generation <= 2 ? settings.coreScale : 1);
   const radii = [0];
-  let gap = settings.generationGap;
   for (let gen = 1; gen <= maxGeneration; gen += 1) {
-    const cardSpan = settings.cardWidth * scaleOf(gen);
-    if (gen === 1) {
-      const minFirst = settings.rootRadius + cardSpan / 2 + settings.junctionDepth + clearance;
-      radii.push(Math.max(settings.firstRadius, minFirst));
-    } else {
-      const prevSpan = settings.cardWidth * scaleOf(gen - 1);
-      const minGap = (cardSpan + prevSpan) / 2 + settings.junctionDepth + clearance;
-      radii.push((radii[gen - 1] ?? 0) + Math.max(gap, minGap));
-      gap *= settings.generationDecay;
-    }
+    const gap =
+      gen <= 2 ? settings.innerRingGap : settings.ringGap * settings.ringGrowth ** (gen - 3);
+    radii.push((radii[gen - 1] ?? 0) + gap);
   }
   return radii;
 }
 
-function nodeScale(node: TreeNode, settings: Settings): number {
-  return node.generation <= 2 ? settings.coreScale : 1;
+/** Root disc: as large as the inner gap allows while leaving the first ring's cards room. */
+function rootRadiusFor(firstRingRadius: number, settings: Settings): number {
+  const clearance = 8;
+  const roomy = firstRingRadius - settings.cardLength / 2 - JUNCTION_DEPTH - clearance;
+  return Math.max(Math.min(firstRingRadius * 0.55, roomy), 12);
 }
 
 function visibleSpouses(node: TreeNode, settings: Settings): PersonRef[] {
@@ -98,49 +99,140 @@ function visibleSpouses(node: TreeNode, settings: Settings): PersonRef[] {
   return node.spouses.slice(0, 1);
 }
 
+/** Gap between the two spouse cards of one family block. */
+function spouseGap(settings: Settings): number {
+  return settings.tightSpouses ? 0 : settings.cardSpacing;
+}
+
 /** Tangential size of the family block (all visible spouse cards + gaps). */
 function blockSize(node: TreeNode, settings: Settings): number {
   const count = Math.max(visibleSpouses(node, settings).length, 1);
-  const scale = nodeScale(node, settings);
-  return count * settings.cardHeight * scale + (count - 1) * settings.spouseGap;
+  return count * settings.cardThickness + (count - 1) * spouseGap(settings);
 }
 
-/** Minimal angular span the node needs on its ring so blocks never overlap. */
-function requiredAngle(node: TreeNode, radius: number, settings: Settings): number {
-  const arc = blockSize(node, settings) + settings.familySpacing * nodeScale(node, settings);
-  return arc / Math.max(radius, settings.firstRadius, 1);
+/**
+ * Two angular appetites per subtree, both measured in radians on the node's ring:
+ *  - `need`: bare cards, touching. Below this they overlap — this is the only
+ *    quantity allowed to push the rings outwards.
+ *  - `want`: cards plus the requested `cardSpacing`. A wish, funded from whatever
+ *    free angle the circle happens to have.
+ */
+interface Demand {
+  need: number;
+  want: number;
 }
 
-/** Bottom-up pass: how much of the circle each subtree needs at the given ring radii. */
-function computeWeights(
+/** Angular span the node itself occupies on its ring. */
+function ownDemand(node: TreeNode, radius: number, settings: Settings): Demand {
+  // The root sits at radius 0 and draws no cards — it claims no arc of its own.
+  if (node.generation === 0) return { need: 0, want: 0 };
+  const r = Math.max(radius, 1);
+  const block = blockSize(node, settings);
+  return { need: block / r, want: (block + settings.cardSpacing) / r };
+}
+
+/** Bottom-up pass: how much of the circle each subtree needs, and would like. */
+function computeDemands(
   tree: DescendantTree,
   radiusOf: (generation: number) => number,
   settings: Settings
-): { weights: Map<TreeNode, number>; rootWeight: number } {
-  const weights = new Map<TreeNode, number>();
-  const computeWeight = (node: TreeNode): number => {
-    const own = requiredAngle(node, radiusOf(node.generation), settings);
-    const childSum = node.children.reduce((sum, child) => sum + computeWeight(child), 0);
-    const weight = node.children.length ? Math.max(own, childSum) : own;
-    weights.set(node, weight);
-    return weight;
+): { demands: Map<TreeNode, Demand>; root: Demand } {
+  const demands = new Map<TreeNode, Demand>();
+  const walk = (node: TreeNode): Demand => {
+    const own = ownDemand(node, radiusOf(node.generation), settings);
+    let childNeed = 0;
+    let childWant = 0;
+    for (const child of node.children) {
+      const d = walk(child);
+      childNeed += d.need;
+      childWant += d.want;
+    }
+    const demand: Demand = node.children.length
+      ? { need: Math.max(own.need, childNeed), want: Math.max(own.want, childWant) }
+      : own;
+    demands.set(node, demand);
+    return demand;
   };
-  return { weights, rootWeight: computeWeight(tree.root) };
+  return { demands, root: walk(tree.root) };
 }
 
 export function computeLayout(tree: DescendantTree, settings: Settings): Layout {
-  let radii = generationRadii(tree.maxGeneration, settings);
-  const radiusOf = (generation: number) => radii[generation] ?? 0;
+  const full = 2 * Math.PI;
+  const baseRadii = generationRadii(tree.maxGeneration, settings);
+  const needAt = (scale: number) =>
+    computeDemands(tree, (generation) => (baseRadii[generation] ?? 0) * scale, settings).root.need;
 
-  // The ring radii from settings are a minimum. When the tree demands more
-  // than the full circle (large trees), grow all rings until it fits —
-  // angular demand scales roughly as 1/radius, so a few iterations converge.
-  let { weights, rootWeight } = computeWeights(tree, radiusOf, settings);
-  for (let i = 0; i < 4 && rootWeight > 2 * Math.PI; i += 1) {
-    const factor = (rootWeight / (2 * Math.PI)) * 1.01;
-    radii = radii.map((r) => r * factor);
-    ({ weights, rootWeight } = computeWeights(tree, radiusOf, settings));
+  // Rings only ever grow to stop cards from *overlapping* — `cardSpacing` is
+  // never a reason to. When even bare cards don't fit the circle, find the
+  // smallest factor that makes them fit by bisection (demand falls as ~1/radius):
+  // anything less would overlap, anything more wastes the sheet.
+  let scale = 1;
+  if (needAt(1) > full) {
+    let hi = 2;
+    while (hi < 4096 && needAt(hi) > full) hi *= 2;
+    let lo = 1;
+    for (let i = 0; i < 40; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (needAt(mid) > full) lo = mid;
+      else hi = mid;
+    }
+    scale = hi;
   }
+
+  const scaled = baseRadii.map((r) => r * scale);
+
+  // Total circumference each ring wants for full `cardSpacing`, and the bare
+  // minimum its cards occupy. Both are radius-independent (pure px along the arc).
+  const wantArc: number[] = baseRadii.map(() => 0);
+  const walkArcs = (node: TreeNode): void => {
+    if (node.generation > 0) {
+      wantArc[node.generation]! += blockSize(node, settings) + settings.cardSpacing;
+    }
+    node.children.forEach(walkArcs);
+  };
+  walkArcs(tree.root);
+
+  // Grow a ring only when its own cards can't get the requested spacing within
+  // the full circle — and only up to GROWTH_CAP× its base radius. Inner rings
+  // that already have room keep their radius; a crowded outer ring pushes itself
+  // (and everything beyond it, to preserve the gaps) outward, never the reverse.
+  const GROWTH_CAP = 1.5;
+  const radii = [0];
+  for (let gen = 1; gen <= tree.maxGeneration; gen += 1) {
+    const base = scaled[gen] ?? 0;
+    const gap = base - (scaled[gen - 1] ?? 0);
+    const wantRadius = Math.min((wantArc[gen] ?? 0) / full, base * GROWTH_CAP);
+    radii.push(Math.max(base, wantRadius, (radii[gen - 1] ?? 0) + gap));
+  }
+
+  const radiusOf = (generation: number) => radii[generation] ?? 0;
+  const { demands } = computeDemands(tree, radiusOf, settings);
+  const rootRadius = rootRadiusFor(radiusOf(1), settings);
+
+  const demandOf = (node: TreeNode): Demand => demands.get(node) ?? { need: 0, want: 0 };
+
+  /**
+   * Splits a parent's angular window between its children. Every child is first
+   * guaranteed the angle it needs not to overlap; the leftover then buys as much
+   * of the requested `cardSpacing` as it covers, shared in proportion to how much
+   * each child asked for. The fraction is solved *per parent*, not once globally,
+   * so a packed branch cannot starve a sparse one on the other side of the tree —
+   * each region spends the slack that sits above it.
+   */
+  const splitWindow = (children: TreeNode[], window: number): number[] => {
+    const ds = children.map(demandOf);
+    const needSum = ds.reduce((sum, d) => sum + d.need, 0);
+    const wantSum = ds.reduce((sum, d) => sum + d.want, 0);
+
+    if (wantSum <= 1e-9) return ds.map(() => window / Math.max(children.length, 1));
+    // Roomier than asked for: hand out the wishes and spread the rest on top.
+    if (wantSum <= window) return ds.map((d) => (window * d.want) / wantSum);
+    // Tight: cover the needs, then fund the spacing wishes as far as it goes.
+    const room = window - needSum;
+    if (room <= 0) return ds.map((d) => (window * d.need) / Math.max(needSum, 1e-9));
+    const fill = room / (wantSum - needSum);
+    return ds.map((d) => d.need + (d.want - d.need) * fill);
+  };
 
   const nodes: PlacedNode[] = [];
   const links: PlacedLink[] = [];
@@ -150,31 +242,30 @@ export function computeLayout(tree: DescendantTree, settings: Settings): Layout 
     const placed = placeNode(node, (start + end) / 2, radiusOf(node.generation), settings);
     nodes.push(placed);
 
-    const total = node.children.reduce((sum, child) => sum + (weights.get(child) ?? 0), 0);
+    const spans = splitWindow(node.children, end - start);
     let cursor = start;
-    for (const child of node.children) {
-      const span = total > 0 ? (end - start) * ((weights.get(child) ?? 0) / total) : 0;
+    node.children.forEach((child, i) => {
+      const span = spans[i] ?? 0;
       const placedChild = place(child, cursor, cursor + span);
-      links.push(makeLink(placed, placedChild, settings));
+      links.push(makeLink(placed, placedChild, rootRadius));
       cursor += span;
-    }
+    });
     return placed;
   };
   place(tree.root, -Math.PI, Math.PI);
 
-  const outerScale = tree.maxGeneration <= 2 ? settings.coreScale : 1;
   return {
     nodes,
     links,
     rings: radii.slice(1),
-    maxRadius: radiusOf(tree.maxGeneration) + (settings.cardWidth * outerScale) / 2 + settings.junctionDepth
+    rootRadius,
+    maxRadius: radiusOf(tree.maxGeneration) + settings.cardLength / 2 + JUNCTION_DEPTH
   };
 }
 
 function placeNode(node: TreeNode, angle: number, radius: number, settings: Settings): PlacedNode {
   const isRoot = node.generation === 0;
   const position = polar(angle, radius);
-  const scale = nodeScale(node, settings);
 
   if (isRoot) {
     return {
@@ -184,7 +275,6 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
       radius,
       position: { x: 0, y: 0 },
       rotationDeg: 0,
-      scale,
       cards: [],
       stubStart: null,
       junctionLocal: null
@@ -192,8 +282,8 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
   }
 
   const spouses = visibleSpouses(node, settings);
-  const width = settings.cardWidth * scale;
-  const height = settings.cardHeight * scale;
+  const width = settings.cardLength;
+  const height = settings.cardThickness;
   const total = blockSize(node, settings);
 
   let cursor = -total / 2;
@@ -206,15 +296,18 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
       width,
       height
     };
-    cursor += height + settings.spouseGap;
+    cursor += height + spouseGap(settings);
     return card;
   });
   if (cards.length && !cards.some((c) => c.isEntry)) {
     cards[0]!.isEntry = true;
   }
 
-  const entryCard = cards.find((c) => c.isEntry) ?? cards[0];
-  const entryCenterY = entryCard ? entryCard.y + entryCard.height / 2 : 0;
+  // Children hang from the point exactly between the two parents (block centre),
+  // reached at the cards' outer edge — the marriage line sits there too.
+  const first = cards[0];
+  const last = cards[cards.length - 1] ?? first;
+  const midY = first && last ? (first.y + first.height / 2 + (last.y + last.height / 2)) / 2 : 0;
   const hasChildren = node.children.length > 0;
 
   return {
@@ -224,14 +317,15 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
     radius,
     position,
     rotationDeg: (angle * 180) / Math.PI,
-    scale,
     cards,
-    stubStart: hasChildren ? { x: width / 2, y: entryCenterY } : null,
-    junctionLocal: hasChildren ? { x: width / 2 + settings.junctionDepth, y: entryCenterY } : null
+    // Stub starts on the marriage line (inset from the outer edge) so the line to
+    // the descendants visibly grows out of it; the fan-out junction sits past the card.
+    stubStart: hasChildren ? { x: width / 2 - SPOUSE_LINE_INSET, y: midY } : null,
+    junctionLocal: hasChildren ? { x: width / 2 + JUNCTION_DEPTH, y: midY } : null
   };
 }
 
-function makeLink(parent: PlacedNode, child: PlacedNode, settings: Settings): PlacedLink {
+function makeLink(parent: PlacedNode, child: PlacedNode, rootRadius: number): PlacedLink {
   const entryCard = child.cards.find((c) => c.isEntry) ?? child.cards[0];
   const end = entryCard
     ? localToGlobal(child.position, child.angle, { x: entryCard.x, y: entryCard.y + entryCard.height / 2 })
@@ -243,7 +337,7 @@ function makeLink(parent: PlacedNode, child: PlacedNode, settings: Settings): Pl
     const dir = { x: end.x / dist, y: end.y / dist };
     return {
       id: child.node.id,
-      start: { x: dir.x * settings.rootRadius, y: dir.y * settings.rootRadius },
+      start: { x: dir.x * rootRadius, y: dir.y * rootRadius },
       end,
       startDir: dir,
       endDir

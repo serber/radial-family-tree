@@ -1,5 +1,6 @@
 import { arc, select, zoom, zoomIdentity } from 'd3';
 import type { Selection, ZoomBehavior } from 'd3';
+import { SPOUSE_LINE_INSET } from '../layout/radial.ts';
 import type { CardSlot, Layout, PlacedLink, PlacedNode, Point } from '../layout/radial.ts';
 import type { PersonRef } from '../tree/build.ts';
 import { defaultSettings, type Settings } from '../settings.ts';
@@ -38,11 +39,8 @@ function needsFlip(deg: number): boolean {
 
 function linkPath(link: PlacedLink, settings: Settings): string {
   const { start, end, startDir, endDir } = link;
-  if (!settings.curvedLines) {
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-  }
   const dist = Math.hypot(end.x - start.x, end.y - start.y) || 1;
-  const tension = Math.min(dist * 0.35, settings.generationGap * 0.6);
+  const tension = Math.min(dist * 0.35, settings.ringGap * 0.6);
   const c1: Point = { x: start.x + startDir.x * tension, y: start.y + startDir.y * tension };
   const c2: Point = { x: end.x + endDir.x * tension, y: end.y + endDir.y * tension };
   return `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
@@ -115,7 +113,7 @@ export class TreeRenderer {
   }
 
   clear(): void {
-    this.update({ nodes: [], links: [], rings: [], maxRadius: 0 }, defaultSettings);
+    this.update({ nodes: [], links: [], rings: [], rootRadius: 0, maxRadius: 0 }, defaultSettings);
   }
 
   /** Scales and centers the drawing so the whole tree is visible. */
@@ -139,7 +137,7 @@ export class TreeRenderer {
       .join('circle')
       .attr('r', (d) => d)
       .attr('fill', 'none')
-      .attr('stroke', palette.ring)
+      .attr('stroke', settings.ringColor)
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '2 7');
   }
@@ -183,7 +181,8 @@ export class TreeRenderer {
       .attr('stroke-width', settings.lineWidth)
       .attr('stroke-linecap', 'round');
 
-    // Marriage line between spouse cards, at their inner (start) edge.
+    // Marriage line between spouse cards, at their outer edge (towards the
+    // descendants) — the child links branch out from its midpoint.
     nodeSel
       .selectAll<SVGPathElement, { from: CardSlot; to: CardSlot }>('path.spouse-link')
       .data(
@@ -193,9 +192,11 @@ export class TreeRenderer {
       .join('path')
       .attr('class', 'spouse-link')
       .attr('d', (d) => {
-        const y1 = d.from.y + d.from.height - 0.5;
-        const y2 = d.to.y + 0.5;
-        const x = d.from.x + 6;
+        // Near the cards' outer edge (towards the descendants); the child stub
+        // starts on this same line (stubStart.x = width/2 − SPOUSE_LINE_INSET).
+        const x = d.from.x + d.from.width - SPOUSE_LINE_INSET;
+        const y1 = d.from.y + d.from.height;
+        const y2 = d.to.y;
         return `M ${x} ${y1} L ${x} ${y2}`;
       })
       .attr('stroke', settings.lineColor)
@@ -259,7 +260,8 @@ export class TreeRenderer {
       })
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
-      .attr('font-size', (d) => settings.fontSize * (d.card.height / settings.cardHeight))
+      .attr('font-size', settings.fontSize)
+      .attr('font-weight', settings.boldFont ? 700 : 400)
       .attr('fill', palette.text)
       .text((d) => truncateName(d.card.person.name));
 
@@ -287,7 +289,7 @@ export class TreeRenderer {
       });
     if (rootSel.empty()) return;
 
-    const r = settings.rootRadius;
+    const r = layout.rootRadius;
     const primary = spouses[0]!;
     const secondary = spouses.length > 1 ? spouses[1]! : null;
 
@@ -329,7 +331,13 @@ export class TreeRenderer {
       .attr('stroke', sexColors(primary.sex, settings).border)
       .attr('stroke-width', 1.2);
 
-    const fontSize = Math.max(settings.fontSize, r / 5);
+    // Fit the longer name inside the disc so it never reaches the edge: bound the
+    // size by the available chord width (widest name) and by the disc height
+    // (two stacked labels leave less room than one).
+    const longest = Math.max(primary.name.length, secondary?.name.length ?? 0, 1);
+    const byWidth = (r * 1.3) / (longest * 0.58);
+    const byHeight = secondary ? r * 0.4 : r * 0.55;
+    const fontSize = Math.max(Math.min(byWidth, byHeight), 5);
     rootSel
       .select<SVGTextElement>('text.label-top')
       .attr('text-anchor', 'middle')
