@@ -1,65 +1,65 @@
 /** Visual & layout settings, adjustable from the side panel. */
 export interface Settings {
-  /** Extra arc length (px) reserved between neighbouring family blocks. */
-  familySpacing: number;
-  /** Card extent along the radial axis (px). */
-  cardWidth: number;
-  /** Card extent along the tangential axis (px). */
-  cardHeight: number;
+  // ---- Layout -------------------------------------------------------------
+  /** Gap (px) for the first two rings: root→1 and 1→2. Tunes the sparse core. */
+  innerRingGap: number;
+  /** Base gap (px) between rings, from ring 3 on. */
+  ringGap: number;
+  /** Per-generation multiplier for the gap from ring 3 on — outer rings grow faster. */
+  ringGrowth: number;
+  /** Arc length (px) kept free between neighbouring cards on a ring. */
+  cardSpacing: number;
+
+  // ---- Card ---------------------------------------------------------------
+  /** Card extent along the radial axis (px). Never affects ring radii. */
+  cardLength: number;
+  /** Card extent along the tangential axis (px). Never affects ring radii. */
+  cardThickness: number;
   fontSize: number;
+  /** Render card names in bold. */
+  boldFont: boolean;
   cornerRadius: number;
-  /** Distance between generation rings (px), before decay. */
-  generationGap: number;
-  /** Multiplier applied to the gap for every generation from the 3rd on (0.5–1). */
-  generationDecay: number;
-  /** Radius of the first (children of root) ring. */
-  firstRadius: number;
-  /** Radius of the central root disc. */
-  rootRadius: number;
-  /** Gap between spouse cards inside one family block. */
-  spouseGap: number;
-  /** Length of the stub connecting a family block to its children fan-out. */
-  junctionDepth: number;
-  lineWidth: number;
-  lineColor: string;
+  /** Glue spouse cards together: no gap between them, whatever cardSpacing says. */
+  tightSpouses: boolean;
+  showBothSpouses: boolean;
+
+  // ---- Style --------------------------------------------------------------
   maleColor: string;
   femaleColor: string;
-  /** Derive the card outline from the fill (accentFor); overrides cardBorderColor. */
-  autoCardBorder: boolean;
-  /** Card outline color, used when autoCardBorder is off. */
-  cardBorderColor: string;
+  /** Card outline color. */
+  borderColor: string;
+  lineColor: string;
+  lineWidth: number;
+  /** Dashed generation rings. */
+  showRings: boolean;
+  /** Color of the dashed generation rings. */
+  ringColor: string;
   /** Background color of the drawing canvas (screen and export). */
   canvasColor: string;
-  /** Extra scale for generations 1–2 (makes the core of the poster readable). */
-  coreScale: number;
-  showBothSpouses: boolean;
-  curvedLines: boolean;
-  showRings: boolean;
 }
 
 export const defaultSettings: Settings = {
-  familySpacing: 10,
-  cardWidth: 145,
-  cardHeight: 25,
+  innerRingGap: 215,
+  ringGap: 180,
+  ringGrowth: 1.12,
+  cardSpacing: 10,
+
+  cardLength: 145,
+  cardThickness: 25,
   fontSize: 12,
+  boldFont: false,
   cornerRadius: 0,
-  generationGap: 100,
-  generationDecay: 1,
-  firstRadius: 140,
-  rootRadius: 120,
-  spouseGap: 0,
-  junctionDepth: 16,
-  lineWidth: 1.4,
-  lineColor: '#b7bccb',
+  tightSpouses: true,
+  showBothSpouses: true,
+
   maleColor: '#d8e7f8',
   femaleColor: '#fadbe7',
-  autoCardBorder: true,
-  cardBorderColor: '#8a8579',
-  canvasColor: '#f7f4ee',
-  coreScale: 1,
-  showBothSpouses: true,
-  curvedLines: true,
-  showRings: true
+  borderColor: '#b7bccb',
+  lineColor: '#b7bccb',
+  lineWidth: 1.4,
+  showRings: true,
+  ringColor: '#d9d2c2',
+  canvasColor: '#f7f4ee'
 };
 
 export interface PrintSize {
