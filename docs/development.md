@@ -38,8 +38,13 @@ import('./src/gedcom/parser.ts').then(async ({ parseGedcom }) => {
 "
 ```
 
-Useful layout invariants to check: coordinates are finite (no NaN), angular
-spans of neighboring blocks on the same ring do not overlap.
+Useful layout invariants to check: coordinates are finite (no NaN); angular
+spans of neighboring blocks on the same ring do not overlap; every stub sits
+exactly on a seam between two adjacent cards of its block; every child's
+`parentFamilyId` matches one of its parent's stubs; every individual reachable
+from the root has a card somewhere in the layout. Re-run these after any
+change to `tree/` or `layout/` rather than eyeballing a screenshot — a
+misattached branch is invisible at full-tree zoom.
 
 ### The whole app
 
@@ -52,10 +57,19 @@ npx vite --port 5199 &
   --screenshot=/tmp/app.png http://localhost:5199/
 ```
 
-For click scenarios (file upload, export) use `puppeteer-core` with the
-system Chrome. The export blob is best captured by wrapping
-`URL.createObjectURL` (the link is revoked right after the click, so a
-`fetch(blobUrl)` after the fact won't work).
+For click scenarios (file upload, export) the repo has no browser driver
+installed — no `puppeteer`, `playwright` or `chromium-cli`. Rather than adding
+one, start Chrome with `--remote-debugging-port=9222` and drive it over the
+DevTools protocol from Node's built-in `WebSocket`: fetch
+`http://localhost:9222/json` for the page target, then `Runtime.evaluate` to
+act on the page and `Page.captureScreenshot` (with a `clip` and a `scale`) to
+grab a magnified crop of one node. To load a `.ged` through the real file
+input, build a `File`, put it on a `DataTransfer`, assign `input.files` and
+dispatch a `change` event.
+
+The export blob is best captured by wrapping `URL.createObjectURL` (the link
+is revoked right after the click, so a `fetch(blobUrl)` after the fact won't
+work).
 
 Note: d3 transitions (the fit-to-view animation) do not finish in headless
 screenshots — that's why the auto-fit on load is instant, and only the
@@ -65,7 +79,13 @@ button is animated.
 
 - `examples/example-large.ged` — the default demo, bundled via a Vite `?raw`
   import in `src/gedcom/sample.ts` (loaded on startup and by the «Пример»
-  button): 483 people, 355 families, 7 generations, 1–4 children per family.
+  button): 489 people, 130 families, 7 generations, 1–4 children per family
+  (359 is the node count, not the family count — the two used to be conflated).
+  Two of those families are second marriages, put at different depths so the
+  remarriage rendering shows up in the default demo: Матвей Щербаков (`@I3@`,
+  ring 1) and Антон Кузнецов (`@I98@`, ring 3) each have two wives and children
+  by both. Use them to check that the spouses fan out beside a single card and
+  that every marriage gets its own stub.
 
 ## Structure
 

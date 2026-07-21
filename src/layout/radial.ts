@@ -10,10 +10,19 @@ export interface Point {
 export interface CardSlot {
   person: PersonRef;
   isEntry: boolean;
+  /** Union this spouse belongs to; null on the blood-line card, which belongs to all of them. */
+  familyId: string | null;
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+/** Where one union's child links leave the family block (local frame). */
+export interface StubSlot {
+  familyId: string;
+  start: Point;
+  junction: Point;
 }
 
 export interface PlacedNode {
@@ -24,10 +33,8 @@ export interface PlacedNode {
   position: Point;
   rotationDeg: number;
   cards: CardSlot[];
-  /** Start of the child-link stub: outer edge of the entry card (local frame). Null for root/leaves. */
-  stubStart: Point | null;
-  /** Point where links to children begin (local frame). Null for root/leaves. */
-  junctionLocal: Point | null;
+  /** One stub per union that has children — empty for root and childless leaves. */
+  stubs: StubSlot[];
 }
 
 export interface PlacedLink {
@@ -276,8 +283,7 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
       position: { x: 0, y: 0 },
       rotationDeg: 0,
       cards: [],
-      stubStart: null,
-      junctionLocal: null
+      stubs: []
     };
   }
 
@@ -286,11 +292,17 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
   const height = settings.cardThickness;
   const total = blockSize(node, settings);
 
+  // Matched by spouse id rather than by position: a union whose second spouse is
+  // missing from the file contributes no card, which would shift any index pairing.
+  const unionOfSpouse = (personId: string): string | null =>
+    node.marriages.find((m) => m.spouseId === personId)?.familyId ?? null;
+
   let cursor = -total / 2;
   const cards: CardSlot[] = spouses.map((person) => {
     const card: CardSlot = {
       person,
       isEntry: person.id === node.entrySpouseId,
+      familyId: person.id === node.entrySpouseId ? null : unionOfSpouse(person.id),
       x: -width / 2,
       y: cursor,
       width,
@@ -303,12 +315,36 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
     cards[0]!.isEntry = true;
   }
 
-  // Children hang from the point exactly between the two parents (block centre),
-  // reached at the cards' outer edge — the marriage line sits there too.
-  const first = cards[0];
-  const last = cards[cards.length - 1] ?? first;
-  const midY = first && last ? (first.y + first.height / 2 + (last.y + last.height / 2)) / 2 : 0;
-  const hasChildren = node.children.length > 0;
+  const centerOf = (card: CardSlot): number => card.y + card.height / 2;
+  const entryCard = cards.find((c) => c.isEntry) ?? cards[0];
+  const unionsWithChildren = new Set(
+    node.children.map((c) => c.parentFamilyId).filter((id): id is string => id !== null)
+  );
+
+  // One stub per union that produced children, leaving from the seam between that
+  // union's two parents at the cards' outer edge, where the marriage line runs.
+  // The seam is measured against the *preceding* card, not the blood-line one: with
+  // cards stacked [person, wife 1, wife 2] the second union parts from between the
+  // two wives, so each marriage fans its descendants out from its own pair.
+  let previousCard = entryCard;
+  const stubs: StubSlot[] = node.marriages
+    .map((m) => {
+      const spouseCard = m.spouseId ? cards.find((c) => c.person.id === m.spouseId) : undefined;
+      const y =
+        spouseCard && previousCard
+          ? (centerOf(previousCard) + centerOf(spouseCard)) / 2
+          : previousCard
+            ? centerOf(previousCard)
+            : 0;
+      if (spouseCard) previousCard = spouseCard;
+      return {
+        familyId: m.familyId,
+        start: { x: width / 2 - SPOUSE_LINE_INSET, y },
+        junction: { x: width / 2 + JUNCTION_DEPTH, y }
+      };
+    })
+    // Filtered only after the walk, so a childless union still shifts the seam.
+    .filter((s) => unionsWithChildren.has(s.familyId));
 
   return {
     node,
@@ -318,10 +354,7 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
     position,
     rotationDeg: (angle * 180) / Math.PI,
     cards,
-    // Stub starts on the marriage line (inset from the outer edge) so the line to
-    // the descendants visibly grows out of it; the fan-out junction sits past the card.
-    stubStart: hasChildren ? { x: width / 2 - SPOUSE_LINE_INSET, y: midY } : null,
-    junctionLocal: hasChildren ? { x: width / 2 + JUNCTION_DEPTH, y: midY } : null
+    stubs
   };
 }
 
@@ -344,7 +377,9 @@ function makeLink(parent: PlacedNode, child: PlacedNode, rootRadius: number): Pl
     };
   }
 
-  const junction = parent.junctionLocal ?? { x: 0, y: 0 };
+  // Hang off the stub of the union this child actually descends from.
+  const stub = parent.stubs.find((s) => s.familyId === child.node.parentFamilyId) ?? parent.stubs[0];
+  const junction = stub?.junction ?? { x: 0, y: 0 };
   return {
     id: child.node.id,
     start: localToGlobal(parent.position, parent.angle, junction),

@@ -46,7 +46,7 @@ function showStats(): void {
   setStatus(
     t('status.stats', {
       people: tree.peopleCount,
-      families: tree.nodeCount,
+      families: tree.familyCount,
       generations: tree.maxGeneration + 1
     })
   );

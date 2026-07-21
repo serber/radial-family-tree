@@ -3,117 +3,145 @@
 All computation lives in `src/layout/radial.ts` — the pure function
 `computeLayout(tree, settings): Layout`. Input: the family tree and settings.
 Output: finished geometry — placed nodes, link lines, rings and the outer
-radius.
+radius. It mutates nothing and touches neither DOM nor D3.
 
 ## Generation rings
 
-Radius of generation `g`:
-
-- `g = 0` → `0` (root at the center);
-- `g = 1` → `firstRadius`;
-- each further step equals `generationGap` multiplied by `generationDecay`
-  for every generation starting from the third:
+Base radii come from the layout settings alone — card size deliberately plays
+no part, so resizing cards never moves a ring:
 
 ```
-r(0) = 0
-r(1) = firstRadius
-r(g) = r(g-1) + generationGap · decay^(g-2)   for g ≥ 2
+r(0) = 0                                        // root at the center
+r(g) = r(g-1) + gap(g)
+
+gap(g) = innerRingGap                           for g ≤ 2
+gap(g) = ringGap · ringGrowth^(g-3)             for g ≥ 3
 ```
 
-The decay (`< 1`) matters for large trees: outer generations are more
-numerous, and equal spacing would inflate the poster.
+So the first two steps are both `innerRingGap` (the sparse core, tuned
+separately for readability), and from ring 3 on each gap is the previous one
+times `ringGrowth`. `ringGrowth` is ≥ 1 — every further ring holds more cards,
+so the gaps **grow** outward rather than decaying.
 
-Note that every step is also clamped from below by the anti-overlap
-minimum (see [Ring auto-expansion](#ring-auto-expansion)), so the decay
-only bites while `generationGap · decay^(g-2)` stays **above** that
-minimum. With the default settings (`generationGap` 100 < minimum ≈ 169)
-the clamp already dominates every step and changing the decay is a
-visible no-op — intentional: correctness of the picture wins over the
-requested spacing.
+These radii are a starting point; the two corrections below may push them out,
+never pull them in.
 
 ## Two tree passes
 
-### 1. Bottom-up: angular weights
+### 1. Bottom-up: angular demand
 
-Every node needs a minimal angular span on its ring so family blocks never
-overlap:
+Each subtree reports two angular appetites, both measured in radians on the
+node's own ring:
 
 ```
-block     = N·cardHeight·scale + (N−1)·spouseGap        // N — visible spouses
-arc       = block + familySpacing·scale
-ownAngle  = arc / max(radius, firstRadius)
-weight    = max(ownAngle, Σ weight(children))           // leaf: ownAngle
+spouseGap = tightSpouses ? 0 : cardSpacing
+block     = N·cardThickness + (N−1)·spouseGap    // N — visible cards in the block
+need      = block / max(radius, 1)               // bare cards, touching
+want      = (block + cardSpacing) / max(radius, 1)
+
+need(node) = children ? max(own.need, Σ need(child)) : own.need
+want(node) = children ? max(own.want, Σ want(child)) : own.want
 ```
 
-`scale` equals `coreScale` for generations 1–2 and `1` beyond. Dividing arc
-length by radius converts it to an angle; for the root the radius is replaced
-by `firstRadius` to avoid division by zero.
+The distinction carries the whole policy: **`need` is the only quantity
+allowed to push the rings outwards** — below it cards would overlap. `want` is
+a wish for `cardSpacing`, funded from whatever free angle the circle happens
+to have. The root sits at radius 0 and draws no cards, so its own demand is
+zero.
 
-The meaning of `max`: a node claims as much space as either itself or its
-subtree needs — whichever is larger.
+`max` means a node claims as much space as either itself or its subtree
+needs — whichever is larger.
 
 ### 2. Top-down: angle assignment
 
-The root gets the full circle `[-π, π]`. Every node is centered in its
-sector, and the sector is split between children proportionally to their
-weights. When the weight sum is smaller than the sector, subtrees stretch
-uniformly — the tree always fills the whole circle.
+The root gets the full circle `[-π, π]`; every node is centered in its sector,
+and `splitWindow` divides that sector between the children:
 
-### Ring auto-expansion
+- every child is first guaranteed its `need`;
+- the leftover buys as much of the requested spacing as it covers, shared in
+  proportion to how much each child asked for (`need + (want − need)·fill`);
+- if the window is roomier than the total `want`, the surplus is spread
+  proportionally to `want` — the tree always fills the whole circle.
 
-The ring radii derived from settings are a **minimum**, guarded in two ways:
+The fill fraction is solved **per parent**, not once globally, so a packed
+branch cannot starve a sparse one on the other side of the tree: each region
+spends the slack sitting above it.
 
-- **Radially**: every ring gap is clamped to at least the card radial extent
-  (plus `junctionDepth` and clearance), and the first ring clears the root
-  disc — cards of neighbouring generations can never overlap radially even
-  when `generationGap < cardWidth`.
-- **Angularly**: when the root weight exceeds `2π` (large trees would
-  compress blocks into overlap), all radii are multiplied by
-  `rootWeight / 2π` and the weights are recomputed — angular demand scales
-  roughly as `1/radius`, so up to 4 iterations converge.
+## Ring auto-expansion
 
-Result: family blocks never overlap regardless of tree size; the settings
-only get looser, never violated.
+Two independent corrections, applied in this order:
+
+- **Global scale (anti-overlap).** If the root's `need` at the base radii
+  exceeds `2π`, bare cards cannot fit the circle at all. Angular demand falls
+  as roughly `1/radius`, so the smallest sufficient factor is found by
+  doubling an upper bound (capped at 4096×) and then 40 bisection steps. All
+  radii are multiplied by it — anything less would overlap, anything more
+  wastes the sheet.
+- **Per-ring growth (spacing wishes).** For each ring the total arc its cards
+  would like (`Σ block + cardSpacing`, radius-independent px along the arc) is
+  divided by `2π`. A ring grows towards that radius only if it is larger than
+  the ring's base, and only up to `GROWTH_CAP` (1.5×) of that base. A ring
+  that already has room keeps its radius; a crowded ring pushes itself — and
+  everything beyond it, so the gaps are preserved — outward, never the reverse.
+
+Result: blocks never overlap regardless of tree size, and the settings only
+ever get looser, never violated.
+
+The central disc is derived, not configured: `rootRadiusFor` takes the largest
+radius that still leaves the first ring's cards room
+(`r(1) − cardLength/2 − JUNCTION_DEPTH − 8`), capped at 55 % of `r(1)` and
+floored at 12.
 
 ## Coordinate systems
 
 The global system is SVG with the origin at the root (the viewBox is centered
 at `0,0`). Node position: `(cos α · r, sin α · r)`.
 
-Spouse cards are described in the **node-local frame**:
+Cards are described in the **node-local frame**:
 
 - `+x` — radially outward from the center;
 - `+y` — tangential (along the ring).
 
 The renderer applies `translate(position) rotate(angleDeg)` to the node
 group — the layout itself does no rotation, it only records `rotationDeg`.
-`cardWidth` is the card's radial extent, `cardHeight` the tangential one.
-The spouse block is centered on the node axis along `y`.
+`cardLength` is the card's radial extent, `cardThickness` the tangential one.
+The block of cards is centered on the node axis along `y`.
 
 ## Connection points
 
 - **Entry** (end of the link from the parent) — the middle of the inner edge
   of the blood-line spouse's card (`isEntry`).
-- **Stub to children** — a short segment from the outer edge of the
-  blood-line spouse's card outward by `junctionDepth`; all child links start
-  from its end (`junction`).
+- **Stub to children** — one per union that produced children (`stubs`), a
+  short segment running outward by `JUNCTION_DEPTH` from the marriage line at
+  the outer card edge. It starts on the seam between that union's spouse card
+  and the card before it: the blood-line person for the first union, the
+  previous spouse for every one after. So with cards stacked
+  `[person, wife 1, wife 2]` the second union's descendants part from between
+  the two wives, not from the middle of the block, and each marriage fans its
+  own children out from its own pair. A link picks its stub by the child's
+  `parentFamilyId`. A childless union still consumes its seam, so the unions
+  after it stay aligned with their own spouse cards.
 - **Root** — links start on the root disc circumference, in the direction of
-  the child.
+  the child; the root has no stubs.
 
-Line shapes are the renderer's job: straight (`L`) or cubic Béziers whose
-control points are laid along the radial directions of parent and child
-(`tension = min(0.35·dist, 0.6·generationGap)`).
+Line shapes are the renderer's job: every link is a cubic Bézier whose control
+points are laid along the radial directions of parent and child, with
+`tension = min(0.35 · dist, 0.6 · ringGap)`.
 
 ## Result
 
 ```ts
 interface Layout {
-  nodes: PlacedNode[];   // position, rotation, cards, connection points
+  nodes: PlacedNode[];   // position, rotation, cards, stubs
   links: PlacedLink[];   // start/end + unit directions for the curves
   rings: number[];       // ring radii 1..maxGeneration
+  rootRadius: number;    // derived radius of the central disc
   maxRadius: number;     // outer extent — for fit-to-view and export
 }
 ```
 
-Keys for D3 joins: family id for nodes (`@F1@` / `single:@I5@`), child node
-id for links.
+`maxRadius` is `r(maxGeneration) + cardLength/2 + JUNCTION_DEPTH`.
+
+Keys for D3 joins: node id for nodes — the id of the person's **first** union
+(`@F1@`) or `single:@I5@` for a leaf; child node id for links; person id for
+the cards inside a node; family id for the stubs inside a node.

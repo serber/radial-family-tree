@@ -7,7 +7,7 @@ TypeScript. The UI is bilingual (English/Russian) with a language switcher.
 ![Radial family tree example](docs/images/radial-family-tree-visualizer-main.jpg)
 
 *JPEG export of the bundled sample dataset (`examples/example-large.ged`,
-483 people, synthetic data): the root couple sits at the center, each ring
+489 people, synthetic data): the root couple sits at the center, each ring
 is a generation, and every card is a person — spouses joined by a marriage
 line, descendants fanning outward.*
 
@@ -26,13 +26,17 @@ npm run preview  # local preview of the build
   (`examples/example-large.ged`).
 - Root family selection from a list (progenitors first, sorted by descendant
   count).
-- Adjustable geometry (radii, spacing, generation decay) and styling (cards,
-  colors, font, lines) — everything recomputes live, zoom is preserved.
+- Adjustable geometry (ring gaps, outer-ring growth, card size and spacing)
+  and styling (colors, font, lines, canvas) — everything recomputes live, zoom
+  is preserved.
+- Remarriages: a person married several times keeps one card, with their
+  spouses fanned out beside it and each marriage's children on their own
+  branch.
 - Names never render upside down on the left half of the circle; card
   tooltips show life years; a marriage line connects spouse cards.
 - Zoom/pan, fit-to-view.
-- Print-ready JPEG export A2/A1/A0 (300 DPI) — native SVG serialization, no
-  third-party libraries.
+- Print-ready JPEG export A3–A0 (300 DPI) plus screen presets (Full HD, 4K,
+  square) — native SVG serialization, no third-party libraries.
 
 ## Architecture
 
