@@ -9,21 +9,40 @@ export interface PersonRef {
   deathYear: number | null;
 }
 
+/** One union of the node's blood-line person, in display order. */
+export interface Marriage {
+  familyId: string;
+  /** The person married into the line; null when the family records no second spouse. */
+  spouseId: string | null;
+}
+
 export interface TreeNode {
-  /** Family id, or `single:<indiId>` for a childless unmarried descendant. */
+  /** Id of the first union, or `single:<indiId>` for a descendant with no union of their own. */
   id: string;
   kind: 'family' | 'single';
   generation: number;
-  /** Spouses to display; the blood-line spouse (if known) comes first. */
+  /**
+   * Cards to display: the blood-line person first, then one spouse per union in
+   * `marriages` order. A person married several times keeps a single card here —
+   * their spouses fan out beside them rather than duplicating them across nodes.
+   */
   spouses: PersonRef[];
-  /** Id of the blood-line spouse — the child through which this family connects upward. */
+  /** Id of the blood-line spouse — the child through which this node connects upward. */
   entrySpouseId: string | null;
+  /** Unions of the blood-line person; aligned with `spouses.slice(1)`. */
+  marriages: Marriage[];
+  /** Union of the parent node this one descends from — picks the stub to hang off. */
+  parentFamilyId: string | null;
+  /** Children of every union, flattened in `marriages` order. */
   children: TreeNode[];
 }
 
 export interface DescendantTree {
   root: TreeNode;
+  /** Drawn nodes — a person plus their unions counts once, `single:` leaves included. */
   nodeCount: number;
+  /** Unions actually drawn. Not the same as `nodeCount`: leaves have none, remarriages several. */
+  familyCount: number;
   peopleCount: number;
   maxGeneration: number;
 }
@@ -47,8 +66,9 @@ function personName(data: GedcomData, id: string | null): string | null {
 
 /**
  * Builds the descendant tree of `rootFamilyId`.
- * A child who founded families becomes one child node per family (FAMS);
- * a child without families becomes a `single` leaf.
+ * A descendant becomes one node carrying every union they founded (FAMS), so a
+ * person married several times appears once, with their spouses fanned out beside
+ * them; a descendant with no union of their own becomes a `single` leaf.
  * Each family appears once — on re-entry (cousin marriages) the first placement wins.
  */
 export function buildTree(data: GedcomData, rootFamilyId: string): DescendantTree {
@@ -62,65 +82,149 @@ export function buildTree(data: GedcomData, rootFamilyId: string): DescendantTre
   let nodeCount = 0;
   let maxGeneration = 0;
 
-  const makeFamilyNode = (familyId: string, generation: number, entryChildId: string | null): TreeNode => {
+  /** Unions of `person` not yet drawn elsewhere, claimed in GEDCOM order. */
+  const claimFamilies = (person: Individual): string[] => {
+    const claimed: string[] = [];
+    for (const famId of person.famsIds) {
+      if (!data.families.has(famId) || visitedFamilies.has(famId)) continue;
+      visitedFamilies.add(famId);
+      claimed.push(famId);
+    }
+    return claimed;
+  };
+
+  /** The spouse of `personId` in `familyId`, if the family records one. */
+  const partnerOf = (familyId: string, personId: string): Individual | null => {
     const family = data.families.get(familyId);
-    if (!family) throw new AppError('familyNotFound', { id: familyId });
-    nodeCount += 1;
-    maxGeneration = Math.max(maxGeneration, generation);
+    if (!family) return null;
+    const otherId = family.husbandId === personId ? family.wifeId : family.husbandId;
+    if (!otherId || otherId === personId) return null;
+    return data.individuals.get(otherId) ?? null;
+  };
 
-    const spouses: PersonRef[] = [];
-    for (const spouseId of [family.husbandId, family.wifeId]) {
-      if (!spouseId) continue;
-      const person = data.individuals.get(spouseId);
-      if (person) {
-        spouses.push(toRef(person));
-        people.add(person.id);
-      }
-    }
-    // Blood-line spouse first, so it sits closest to the parent link.
-    if (entryChildId) {
-      const idx = spouses.findIndex((s) => s.id === entryChildId);
-      if (idx > 0) spouses.unshift(...spouses.splice(idx, 1));
-    }
-
-    const children: TreeNode[] = [];
+  const childrenOf = (familyId: string, generation: number): TreeNode[] => {
+    const family = data.families.get(familyId);
+    if (!family) return [];
+    const nodes: TreeNode[] = [];
     for (const childId of family.childIds) {
       const child = data.individuals.get(childId);
       if (!child) continue;
       people.add(childId);
-      const ownFamilies = child.famsIds.filter((famId) => data.families.has(famId));
-      if (ownFamilies.length === 0) {
+      const claimed = claimFamilies(child);
+      if (claimed.length === 0) {
+        // No union of their own — or every union already drawn on another branch.
         nodeCount += 1;
-        maxGeneration = Math.max(maxGeneration, generation + 1);
-        children.push({
+        maxGeneration = Math.max(maxGeneration, generation);
+        nodes.push({
           id: `single:${childId}`,
           kind: 'single',
-          generation: generation + 1,
+          generation,
           spouses: [toRef(child)],
           entrySpouseId: childId,
+          marriages: [],
+          parentFamilyId: familyId,
           children: []
         });
         continue;
       }
-      for (const famId of ownFamilies) {
-        if (visitedFamilies.has(famId)) continue;
-        visitedFamilies.add(famId);
-        children.push(makeFamilyNode(famId, generation + 1, childId));
+      nodes.push(makePersonNode(child, claimed, generation, familyId));
+    }
+    return nodes;
+  };
+
+  /** A descendant plus every union they founded, as one node. */
+  function makePersonNode(
+    person: Individual,
+    familyIds: string[],
+    generation: number,
+    parentFamilyId: string | null
+  ): TreeNode {
+    nodeCount += 1;
+    maxGeneration = Math.max(maxGeneration, generation);
+    people.add(person.id);
+
+    const spouses: PersonRef[] = [toRef(person)];
+    const marriages: Marriage[] = [];
+    const children: TreeNode[] = [];
+    for (const familyId of familyIds) {
+      const spouse = partnerOf(familyId, person.id);
+      if (spouse) {
+        spouses.push(toRef(spouse));
+        people.add(spouse.id);
+      }
+      marriages.push({ familyId, spouseId: spouse?.id ?? null });
+      children.push(...childrenOf(familyId, generation + 1));
+    }
+
+    return {
+      id: familyIds[0] ?? `single:${person.id}`,
+      kind: 'family',
+      generation,
+      spouses,
+      entrySpouseId: person.id,
+      marriages,
+      parentFamilyId,
+      children
+    };
+  }
+
+  const root = makeRootNode();
+  // `visitedFamilies` also holds unions claimed by branches that were pruned, so
+  // count the unions the tree really carries.
+  let familyCount = 0;
+  const countUnions = (node: TreeNode): void => {
+    familyCount += node.marriages.length;
+    node.children.forEach(countUnions);
+  };
+  countUnions(root);
+
+  return { root, nodeCount, familyCount, peopleCount: people.size, maxGeneration };
+
+  /**
+   * The root couple has no blood line to pivot on, so both spouses get a card and
+   * either one's further unions extend the disc — otherwise those branches, and
+   * every descendant on them, would be dropped from the chart entirely.
+   */
+  function makeRootNode(): TreeNode {
+    nodeCount += 1;
+    const spouses: PersonRef[] = [];
+    for (const spouseId of [rootFamily!.husbandId, rootFamily!.wifeId]) {
+      if (!spouseId) continue;
+      const person = data.individuals.get(spouseId);
+      if (!person) continue;
+      spouses.push(toRef(person));
+      people.add(person.id);
+    }
+    // Keeps the `spouses.slice(1)` ↔ `marriages` alignment: card 2 is the root spouse.
+    const marriages: Marriage[] = [{ familyId: rootFamilyId, spouseId: spouses[1]?.id ?? null }];
+    const children = childrenOf(rootFamilyId, 1);
+
+    for (const spouseId of [rootFamily!.husbandId, rootFamily!.wifeId]) {
+      if (!spouseId) continue;
+      const person = data.individuals.get(spouseId);
+      if (!person) continue;
+      for (const familyId of claimFamilies(person)) {
+        const other = partnerOf(familyId, person.id);
+        if (other) {
+          spouses.push(toRef(other));
+          people.add(other.id);
+        }
+        marriages.push({ familyId, spouseId: other?.id ?? null });
+        children.push(...childrenOf(familyId, 1));
       }
     }
 
     return {
-      id: familyId,
+      id: rootFamilyId,
       kind: 'family',
-      generation,
+      generation: 0,
       spouses,
-      entrySpouseId: entryChildId,
+      entrySpouseId: null,
+      marriages,
+      parentFamilyId: null,
       children
     };
-  };
-
-  const root = makeFamilyNode(rootFamilyId, 0, null);
-  return { root, nodeCount, peopleCount: people.size, maxGeneration };
+  }
 }
 
 function countDescendants(data: GedcomData, familyId: string, visited: Set<string>): number {

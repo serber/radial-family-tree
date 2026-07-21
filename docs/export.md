@@ -23,7 +23,7 @@ screen presets:
 
 ```
 live SVG ──clone──▶ clone without zoom transform ──viewBox from maxRadius──▶
-XMLSerializer ──▶ Blob (image/svg+xml) ──▶ <img> ──▶ canvas (white bg) ──▶ toBlob('image/jpeg', 0.95)
+XMLSerializer ──▶ Blob (image/svg+xml) ──▶ <img> ──▶ canvas (canvasColor bg) ──▶ toBlob('image/jpeg', 0.95)
 ```
 
 1. **Cloning.** The live SVG is cloned whole; the `.zoom-layer` transform is
@@ -37,8 +37,10 @@ XMLSerializer ──▶ Blob (image/svg+xml) ──▶ <img> ──▶ canvas (w
 3. **Fonts.** The chart uses Spectral (a web font), and the rasterizing
    `<img>` cannot load external resources — so the export fetches the Google
    Fonts CSS once, inlines every font file as a `data:` URI and injects the
-   result as a `<style>` into the clone (cached per session). If the fetch
-   fails (offline), the serif fallback from `FONT_STACK` (Georgia) applies.
+   result as a `<style>` into the clone (cached per session in
+   `fontCssPromise`). If the fetch fails (offline), the cache is cleared so a
+   later export retries, and the serif fallback from `FONT_STACK` (Georgia)
+   applies to this one.
 4. **Rasterization.** The serialized SVG is loaded as an `<img>` via a blob
    URL and drawn onto a print-sized canvas over a `canvasColor` fill (JPEG
    has no alpha channel).

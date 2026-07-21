@@ -1,7 +1,7 @@
 import { arc, select, zoom, zoomIdentity } from 'd3';
 import type { Selection, ZoomBehavior } from 'd3';
 import { SPOUSE_LINE_INSET } from '../layout/radial.ts';
-import type { CardSlot, Layout, PlacedLink, PlacedNode, Point } from '../layout/radial.ts';
+import type { CardSlot, Layout, PlacedLink, PlacedNode, Point, StubSlot } from '../layout/radial.ts';
 import type { PersonRef } from '../tree/build.ts';
 import { defaultSettings, type Settings } from '../settings.ts';
 import { FONT_STACK, lifeSpanLabel, palette, sexColors } from './palette.ts';
@@ -164,19 +164,19 @@ export class TreeRenderer {
       .attr('class', 'family')
       .attr('transform', (d) => `translate(${d.position.x},${d.position.y}) rotate(${d.rotationDeg})`);
 
-    // Stub from the entry card to the fan-out point of child links.
+    // One stub per union with children, from its marriage line to the fan-out point.
     nodeSel
-      .selectAll<SVGLineElement, PlacedNode>('line.stub')
+      .selectAll<SVGLineElement, StubSlot>('line.stub')
       .data(
-        (d) => (d.stubStart && d.junctionLocal ? [d] : []),
-        (d) => d.node.id
+        (d) => d.stubs,
+        (d) => d.familyId
       )
       .join('line')
       .attr('class', 'stub')
-      .attr('x1', (d) => d.stubStart!.x)
-      .attr('y1', (d) => d.stubStart!.y)
-      .attr('x2', (d) => d.junctionLocal!.x)
-      .attr('y2', (d) => d.junctionLocal!.y)
+      .attr('x1', (d) => d.start.x)
+      .attr('y1', (d) => d.start.y)
+      .attr('x2', (d) => d.junction.x)
+      .attr('y2', (d) => d.junction.y)
       .attr('stroke', settings.lineColor)
       .attr('stroke-width', settings.lineWidth)
       .attr('stroke-linecap', 'round');
@@ -278,12 +278,10 @@ export class TreeRenderer {
       .join((enter) => {
         const g = enter.append('g').attr('class', 'root-node');
         g.append('circle').attr('class', 'halo');
-        g.append('path').attr('class', 'half-top');
-        g.append('path').attr('class', 'half-bottom');
-        g.append('line').attr('class', 'divider');
+        g.append('g').attr('class', 'slices');
+        g.append('g').attr('class', 'dividers');
         g.append('circle').attr('class', 'outline');
-        g.append('text').attr('class', 'label-top');
-        g.append('text').attr('class', 'label-bottom');
+        g.append('g').attr('class', 'labels');
         g.append('title');
         return g;
       });
@@ -291,7 +289,13 @@ export class TreeRenderer {
 
     const r = layout.rootRadius;
     const primary = spouses[0]!;
-    const secondary = spouses.length > 1 ? spouses[1]! : null;
+    // The disc is cut into one wedge per person, so a root ancestor who married
+    // more than once shows every spouse instead of just the first.
+    const n = spouses.length;
+    const sliceAngle = (2 * Math.PI) / n;
+    // d3.arc angles are clockwise from 12 o'clock, so at n = 2 the boundaries land
+    // left and right and the two wedges are the familiar top and bottom halves.
+    const boundary = (i: number): number => -Math.PI / 2 + i * sliceAngle;
 
     rootSel
       .select<SVGCircleElement>('circle.halo')
@@ -299,28 +303,30 @@ export class TreeRenderer {
       .attr('fill', '#ffffff')
       .attr('stroke', palette.rootHalo)
       .attr('stroke-width', 1);
-    const half = arc<{ start: number; end: number }>()
+
+    const wedge = arc<{ start: number; end: number }>()
       .innerRadius(0)
       .outerRadius(r)
       .startAngle((d) => d.start)
       .endAngle((d) => d.end);
 
-    // d3.arc angles are clockwise from 12 o'clock: top half is [-π/2, π/2].
     rootSel
-      .select<SVGPathElement>('path.half-top')
-      .attr('d', half({ start: -Math.PI / 2, end: Math.PI / 2 }))
-      .attr('fill', sexColors(primary.sex, settings).fill);
+      .select('g.slices')
+      .selectAll<SVGPathElement, PersonRef>('path')
+      .data(spouses, (d) => d.id)
+      .join('path')
+      .attr('d', (_d, i) => wedge({ start: boundary(i), end: boundary(i + 1) }))
+      .attr('fill', (d) => sexColors(d.sex, settings).fill);
 
     rootSel
-      .select<SVGPathElement>('path.half-bottom')
-      .attr('d', half({ start: Math.PI / 2, end: (Math.PI * 3) / 2 }))
-      .attr('fill', secondary ? sexColors(secondary.sex, settings).fill : sexColors(primary.sex, settings).fill);
-
-    rootSel
-      .select<SVGLineElement>('line.divider')
-      .attr('display', secondary ? null : 'none')
-      .attr('x1', -r)
-      .attr('x2', r)
+      .select('g.dividers')
+      .selectAll<SVGLineElement, number>('line')
+      .data(n > 1 ? spouses.map((_d, i) => boundary(i)) : [])
+      .join('line')
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', (a) => Math.sin(a) * r)
+      .attr('y2', (a) => -Math.cos(a) * r)
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 1.5);
 
@@ -331,36 +337,28 @@ export class TreeRenderer {
       .attr('stroke', sexColors(primary.sex, settings).border)
       .attr('stroke-width', 1.2);
 
-    // Fit the longer name inside the disc so it never reaches the edge: bound the
-    // size by the available chord width (widest name) and by the disc height
-    // (two stacked labels leave less room than one).
-    const longest = Math.max(primary.name.length, secondary?.name.length ?? 0, 1);
+    // Fit the longest name inside the disc so it never reaches the edge: bound the
+    // size by the available chord width (widest name) and by the disc height, which
+    // every extra stacked label divides further.
+    const longest = Math.max(...spouses.map((p) => p.name.length), 1);
     const byWidth = (r * 1.3) / (longest * 0.58);
-    const byHeight = secondary ? r * 0.4 : r * 0.55;
+    const byHeight = n > 1 ? (r * 0.8) / n : r * 0.55;
     const fontSize = Math.max(Math.min(byWidth, byHeight), 5);
+    const step = (r * 1.68) / n;
+
     rootSel
-      .select<SVGTextElement>('text.label-top')
+      .select('g.labels')
+      .selectAll<SVGTextElement, PersonRef>('text')
+      .data(spouses, (d) => d.id)
+      .join('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
-      .attr('y', secondary ? -r * 0.42 : 0)
+      .attr('y', (_d, i) => (n > 1 ? (i - (n - 1) / 2) * step : 0))
       .attr('font-size', fontSize)
       .attr('font-weight', 600)
       .attr('fill', palette.text)
-      .text(truncateName(primary.name));
+      .text((d) => truncateName(d.name));
 
-    rootSel
-      .select<SVGTextElement>('text.label-bottom')
-      .attr('display', secondary ? null : 'none')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .attr('y', r * 0.42)
-      .attr('font-size', fontSize)
-      .attr('font-weight', 600)
-      .attr('fill', palette.text)
-      .text(secondary ? truncateName(secondary.name) : '');
-
-    rootSel
-      .select('title')
-      .text([primary, secondary].filter((p): p is PersonRef => p !== null).map(personTitle).join('\n'));
+    rootSel.select('title').text(spouses.map(personTitle).join('\n'));
   }
 }

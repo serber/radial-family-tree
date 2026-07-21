@@ -16,7 +16,7 @@ LEVEL [@XREF@] TAG [VALUE]
 | `NAME` | Name; slashes around the surname are removed: `Иван /Иванов/` → `Иван Иванов` |
 | `GIVN`, `SURN` | Fallback: when `NAME` is missing, the name is assembled from these |
 | `SEX` | `M` / `F`; anything else → `U` (unknown) |
-| `FAMS` | Families where the person is a spouse (can be several) |
+| `FAMS` | Families where the person is a spouse. Several are supported: the person keeps one card and their spouses fan out beside it, each union carrying its own children — see [architecture.md](architecture.md) |
 | `FAMC` | Family where the person is a child |
 | `BIRT` → `DATE` | The year is extracted (the last 3–4 digit number in the value) |
 | `DEAT` → `DATE` | Same; years are shown in card tooltips |
@@ -36,8 +36,9 @@ LEVEL [@XREF@] TAG [VALUE]
 - **A person without a name** gets their id as the name.
 - **BOM** and all line-ending styles (`\r\n`, `\r`, `\n`) are handled.
 - Empty and unrecognized lines are ignored.
-- A file without a single `FAM` record is an error
-  («В файле не найдено ни одной семьи»).
+- A file without a single `FAM` record is an error — the parser throws
+  `AppError('noFamilies')` and the UI renders it as «В файле не найдено ни
+  одной семьи (записи FAM)».
 
 ## What the parser does not do
 
@@ -68,5 +69,5 @@ LEVEL [@XREF@] TAG [VALUE]
 1 CHIL @I3@
 ```
 
-The bundled demo (`examples/example-large.ged`, 483 people) loads on startup
+The bundled demo (`examples/example-large.ged`, 489 people) loads on startup
 and via the «Пример» button.

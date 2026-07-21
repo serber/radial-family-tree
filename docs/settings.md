@@ -3,49 +3,80 @@
 All settings live in the `Settings` type (`src/settings.ts`); the panel is
 generated from the `controlGroups` descriptors (`src/ui/controls.ts`).
 Changing any setting recomputes the layout and updates the SVG; zoom state is
-preserved. Panel labels come from `messages/{en,ru}.json` (`controls.*`
-keys); the Russian variants are listed below next to each key.
+preserved. Panel labels come from `messages/{en,ru}.json` (`controls.*` and
+`groups.*` keys); the Russian variants are listed below next to each key.
 
-## Geometry («Геометрия»)
+The three tables below mirror the three panel groups, in panel order.
 
-| Panel label | Key | Range | Default | Effect |
-| --- | --- | --- | --- | --- |
-| Радиус первого круга | `firstRadius` | 60–400 | 140 | Radius of the first generation ring |
-| Расстояние между поколениями | `generationGap` | 80–400 | 100 | Base step between rings |
-| Сжатие радиуса | `generationDecay` | 50–100 % | 100 % | Gap multiplier per generation from the 3rd on; stored as 0.5–1.0. Compresses only the part of the gap above the anti-overlap minimum (≈ `cardWidth + junctionDepth + 8`, i.e. ~169 px at defaults) — with the default `generationGap` of 100 the rings already sit at that minimum and the slider has no visible effect until the generation spacing is raised above it (or the cards are made narrower) |
-| Радиус корневого узла | `rootRadius` | 20–200 | 120 | Size of the central disc with the root couple |
-| Расстояние между семьями | `familySpacing` | 0–160 | 10 | Arc reserve between neighboring blocks on a ring |
-| Промежуток между супругами | `spouseGap` | 0–40 | 0 | Gap between cards inside a family block; the marriage line is drawn in it at the inner edge (invisible at 0) |
-| Отступ линии к детям | `junctionDepth` | 0–80 | 16 | Length of the stub from the card to the fan-out point of child links |
-
-## Cards («Карточки»)
+## Layout («Компоновка»)
 
 | Panel label | Key | Range | Default | Effect |
 | --- | --- | --- | --- | --- |
-| Ширина карточки | `cardWidth` | 40–320 | 145 | Radial extent of a card |
-| Высота карточки | `cardHeight` | 12–140 | 25 | Tangential extent of a card |
-| Размер шрифта | `fontSize` | 6–26 | 12 | Scales together with `coreScale` |
-| Скругление углов | `cornerRadius` | 0–30 | 0 | `rx` of the rectangles |
-| Масштаб 1–2 поколений | `coreScale` | 1.0–3.0× | 1.0× | Enlarges the poster core: cards, font and spacing of generations 1–2 |
-| Цвет карточек — мужчины | `maleColor` | color | `#d8e7f8` | Fill of male cards; the strip accent is derived automatically (darker, calmer) |
-| Цвет карточек — женщины | `femaleColor` | color | `#fadbe7` | Same for female cards |
-| Границы в тон заливки | `autoCardBorder` | on/off | on | When on, the card outline is derived from the fill (`accentFor`); when off, `cardBorderColor` is used |
-| Цвет границ карточек | `cardBorderColor` | color | `#8a8579` | Card and root-medallion outline; has effect only when `autoCardBorder` is off |
-| Показывать обоих супругов | `showBothSpouses` | on/off | on | When off, only the blood-line spouse remains |
+| Расстояние между кольцами | `ringGap` | 60–500 | 180 | Base gap between rings, applied from ring 3 on |
+| Рост внешних колец | `ringGrowth` | 100–160 % | 112 % | Multiplier applied to the gap once per generation from ring 3 on; stored as 1.0–1.6. Outer rings hold more cards, so each gap is *larger* than the previous one — this grows the chart, it never compresses it |
+| Расстояние между кольцами 1 и 2 | `innerRingGap` | 60–600 | 215 | Gap used for both of the first two steps (root→1 and 1→2). Keeps the sparse core readable independently of `ringGap` |
+| Расстояние между карточками | `cardSpacing` | 0–160 | 10 | Arc length kept free between neighbouring cards on a ring. A wish, not a guarantee: it is funded from whatever free angle the circle has (see [layout.md](layout.md)) |
 
-## Lines and background («Линии и фон»)
+## Card («Карточка»)
 
 | Panel label | Key | Range | Default | Effect |
 | --- | --- | --- | --- | --- |
-| Толщина линий | `lineWidth` | 0.2–6 | 1.4 | Link lines, stubs and the marriage line |
-| Цвет линий | `lineColor` | color | `#b7bccb` | |
+| Длина карточки | `cardLength` | 40–320 | 145 | Card extent along the **radial** axis |
+| Толщина карточки | `cardThickness` | 8–140 | 25 | Card extent along the **tangential** axis |
+| Размер шрифта | `fontSize` | 6–26 | 12 | Card name size, in SVG units |
+| Жирный шрифт | `boldFont` | on/off | off | Card names at weight 700 instead of 400 |
+| Скругление углов | `cornerRadius` | 0–30 | 0 | `rx` of the card rectangles; the entry strip is clipped to the same silhouette |
+| Супруги без зазора | `tightSpouses` | on/off | on | Glues the cards of one block together whatever `cardSpacing` says. The marriage line lives in that gap, so at the default (on) it has zero length and is invisible |
+| Показывать обоих супругов | `showBothSpouses` | on/off | on | When off, only the blood-line spouse remains — for a person married several times all the spouse cards collapse, and every marriage's children then hang off the one remaining card |
+
+Neither card dimension ever moves a ring: radii are derived from the layout
+settings alone, so resizing cards never reflows the generations.
+
+## Style («Стиль»)
+
+| Panel label | Key | Range | Default | Effect |
+| --- | --- | --- | --- | --- |
+| Цвет карточки — мужчина | `maleColor` | color | `#d8e7f8` | Fill of male cards; the entry-strip accent is derived from it automatically |
+| Цвет карточки — женщина | `femaleColor` | color | `#fadbe7` | Same for female cards |
+| Цвет рамки | `borderColor` | color | `#b7bccb` | Card outline, for every sex |
+| Цвет линии | `lineColor` | color | `#b7bccb` | Links, stubs and the marriage line |
+| Толщина линии | `lineWidth` | 0.2–6 (step 0.1) | 1.4 | Same three |
+| Кольца поколений | `showRings` | on/off | on | Dashed guide circles, one per generation |
+| Цвет колец | `ringColor` | color | `#d9d2c2` | Color of those circles |
 | Цвет полотна | `canvasColor` | color | `#f7f4ee` | Chart background, on screen and in the export |
-| Гладкие линии | `curvedLines` | on/off | on | Cubic Béziers instead of straight lines |
-| Кольца поколений | `showRings` | on/off | on | Dashed guide circles |
 
-Note: card “width” and “height” are relative to the radius, not the screen —
-a card 145 wide is stretched **from the center outward**. More on coordinate
-systems in [layout.md](layout.md).
+Note: card “length” and “thickness” are relative to the radius, not the
+screen — a card 145 long is stretched **from the center outward**. More on
+coordinate systems in [layout.md](layout.md).
+
+## Not settings
+
+Some geometry that looks tunable is deliberately fixed in code — it exists to
+keep the drawing correct rather than to be styled:
+
+| Constant | Where | Value | Meaning |
+| --- | --- | --- | --- |
+| root disc radius | `rootRadiusFor`, `src/layout/radial.ts` | derived | Fitted to the first ring: as large as the inner gap allows while leaving the first ring's cards room, capped at 55 % of that radius |
+| `JUNCTION_DEPTH` | `src/layout/radial.ts` | 16 | Length of the stub from the marriage line to the fan-out point of child links |
+| `SPOUSE_LINE_INSET` | `src/layout/radial.ts` | 6 | Inset of the marriage line from the cards' outer edge; the stub starts there |
+| `GROWTH_CAP` | `computeLayout` | 1.5 | How far a crowded ring may push itself out beyond its base radius |
+| text, ring guide and unknown-sex colors | `palette`, `src/render/palette.ts` | fixed | Not exposed in the panel on purpose |
+
+## Export sizes
+
+`PRINT_SIZES` (`src/settings.ts`) is the canvas preset list for the JPEG
+export, not part of `Settings`. Each `key` doubles as the i18n key of the
+visible label (`printSizes.<key>`). See [export.md](export.md).
+
+| Key | Size (px) | Kind |
+| --- | --- | --- |
+| `a3` | 4961×3508 | landscape print, 300 DPI |
+| `a2` | 7016×4961 | landscape print, 300 DPI |
+| `a1` | 9933×7016 | landscape print, 300 DPI |
+| `a0` | 14043×9933 | landscape print, 300 DPI |
+| `fullhd` | 1920×1080 | screen |
+| `4k` | 3840×2160 | screen |
+| `square` | 2400×2400 | screen |
 
 ## Adding a new setting
 
@@ -53,23 +84,27 @@ systems in [layout.md](layout.md).
    (`src/settings.ts`).
 2. Add a descriptor to the appropriate `controlGroups` group
    (`src/ui/controls.ts`): `range` (with optional `toValue`/`toDisplay`/
-   `format` — see `generationDecay`), `color` or `toggle`.
-3. Consume the value in `computeLayout` and/or `TreeRenderer.update`.
+   `format` — see `ringGrowth`, which stores 1.12 but shows «112 %»), `color`
+   or `toggle`.
+3. Add the label under `controls.<key>` in both `messages/en.json` and
+   `messages/ru.json` — the descriptor carries a `labelKey`, never literal text.
+4. Consume the value in `computeLayout` and/or `TreeRenderer.update`.
 
 No need to touch `index.html` — the panel is built from descriptors, and key
-types are checked by the compiler.
+types are checked by the compiler: `NumericSettingKey`, `BooleanSettingKey`
+and `ColorSettingKey` are derived from `Settings`, so a control can only point
+at a field of the matching type.
 
 ## Colors and font
 
 Male/female card fills are configurable via the pickers (see above); the
 accent color of the blood-line strip is not chosen separately — it is derived
 from the fill (same hue, darker and less saturated, `accentFor` in
-`src/render/palette.ts`). The card stroke and the root medallion outline use
-the same derived color while `autoCardBorder` is on, or the explicit
-`cardBorderColor` when it is off. The sidebar legend syncs with the chosen
-colors via the `--male`/`--female` CSS variables. Text and ring colors, plus
-the gray for unknown sex, are fixed in the `palette` constant there and are
-deliberately not exposed in the panel.
+`src/render/palette.ts`, memoised per fill). The card stroke is *not* derived:
+it always comes from `borderColor`. Cards of unknown sex use a fixed gray pair
+from `palette.unknown`. The sidebar legend syncs with the chosen colors via
+the `--male`/`--female` CSS variables. Text and ring-guide colors are fixed in
+the same `palette` constant and are deliberately not exposed in the panel.
 
 Typography: the UI uses Manrope, the chart uses Spectral (both from Google
 Fonts, loaded in `index.html`); `FONT_STACK` falls back to Georgia. The

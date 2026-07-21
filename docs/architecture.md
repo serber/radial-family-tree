@@ -26,15 +26,23 @@ INDI/FAM records. Details in [gedcom.md](gedcom.md).
 
 ### `src/tree` — descendant tree
 `buildTree(data, rootFamilyId): DescendantTree` builds a tree whose node is a
-**family** (a couple plus links to the children's family nodes), not a person:
+**descendant together with every union they founded**, not a single family:
 
-- a child who founded several families (remarriages) produces several child
-  nodes — one per FAMS;
-- a child with no family of their own becomes a leaf with id `single:<indiId>`;
-- cycle protection (marriages between relatives): a visited-family set; on
-  re-entry the family stays where it was first placed;
 - spouses in a node are ordered blood-line first (`entrySpouseId`) — the one
-  who is a child of the parent family.
+  who is a child of the parent family — followed by one card per union;
+- a child who founded several families (remarriages) stays **one** node: the
+  extra spouses fan out beside them, and `marriages` lists each union in
+  display order. Every union gets its own stub, so the children of each
+  marriage hang off their own parents rather than off a shared point;
+- each child records the union it descends from in `parentFamilyId`, which is
+  what pairs a link with the right stub;
+- a child with no union of their own becomes a leaf with id `single:<indiId>`;
+- cycle protection (marriages between relatives): a visited-family set; on
+  re-entry the family stays where it was first placed. A descendant whose every
+  union is already drawn elsewhere still appears, as a `single:` leaf;
+- the root couple has no blood line to pivot on, so both spouses get a card and
+  the further unions of *either* of them extend the root node — otherwise those
+  branches, and all their descendants, would be missing from the chart.
 
 `listRootCandidates(data)` returns candidate root families: progenitors first
 (neither spouse has a FAMC), sorted by descendant count within each group.
