@@ -30,6 +30,7 @@
     "ringGap": "Ring step, from ring 3",
     "ringGrowth": "Step growth per ring",
     "innerRingGap": "Ring step, rings 1–2",
+    "outerRingScale": "Step of the two outer rings",
     "cardSpacing": "Gap between cards",
     "cardLength": "Card length",
     "cardThickness": "Card thickness",
@@ -59,6 +60,7 @@
   "status": {
     "stats": "Shown: {people, plural, one {# person} other {# people}} · {families, plural, one {# family} other {# families}} · {generations, plural, one {# generation} other {# generations}}",
     "cardShortened": "cards shortened to {length} px so they don't reach the next ring",
+    "outerFloor": "outer ring step kept at {step} px — any closer and the cards would collide",
     "ringsPushed": "{count, plural, one {ring {rings} moved out} other {rings {rings} moved out}} to fit the cards with the requested gap",
     "rootOption": "{label} ({count, plural, one {# descendant} other {# descendants}})",
     "exporting": "Exporting {size}…",

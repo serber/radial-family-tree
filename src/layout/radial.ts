@@ -91,6 +91,11 @@ export interface Layout {
    * because their own cards (with `cardSpacing`) didn't fit there.
    */
   pushedRings: number[];
+  /**
+   * Set when «Шаг двух внешних колец» asked for less than one card plus its
+   * stub: the step it stopped at instead (px). Null when the slider is honoured.
+   */
+  outerFloor: number | null;
 }
 
 /** Length of the stub connecting a family block to its children fan-out. */
@@ -101,6 +106,9 @@ const MIN_ROOT_RADIUS = 12;
 
 /** Free radial room between one ring's child junctions and the next ring's cards. */
 const RING_CLEARANCE = 8;
+
+/** «Шаг двух внешних колец» only applies to charts with more rings than this. */
+const OUTER_MIN_RINGS = 4;
 
 /** Inset of the marriage line from the cards' outer edge; the child stub starts here. */
 export const SPOUSE_LINE_INSET = 6;
@@ -115,19 +123,35 @@ const localToGlobal = (origin: Point, angle: number, point: Point): Point => {
 };
 
 /**
- * Ring distances per depth, derived purely from the layout settings — card
- * size deliberately plays no part, so resizing cards never moves a ring.
- * The first two gaps come from `innerRingGap`; from ring 3 on each gap is the
- * previous one times `ringGrowth`.
+ * Ring distances per depth, derived from the layout settings: the first two
+ * gaps come from `innerRingGap`; from ring 3 on each gap is the previous one
+ * times `ringGrowth`; on a deep chart the last two are scaled by
+ * `outerRingScale`. Card size only bounds that last factor from below, so
+ * resizing cards otherwise never moves a ring.
  */
-function generationRadii(maxDepth: number, settings: Settings): number[] {
+function generationRadii(
+  maxDepth: number,
+  settings: Settings
+): { radii: number[]; outerFloor: number | null } {
+  // The outermost generations are usually few and far between, so on a deep
+  // chart (more than OUTER_MIN_RINGS rings) their two steps can be tightened on
+  // their own. Never below one card plus its stub, though: tightening further
+  // would push the length limit onto every card in the chart.
+  const tightOuter = maxDepth > OUTER_MIN_RINGS && settings.outerRingScale < 1;
+  const tightest = settings.cardLength + JUNCTION_DEPTH + RING_CLEARANCE;
+  let outerFloor: number | null = null;
   const radii = [0];
   for (let depth = 1; depth <= maxDepth; depth += 1) {
-    const gap =
+    let gap =
       depth <= 2 ? settings.innerRingGap : settings.ringGap * settings.ringGrowth ** (depth - 3);
+    if (tightOuter && depth > maxDepth - 2) {
+      const scaled = gap * settings.outerRingScale;
+      if (scaled < tightest && gap > tightest) outerFloor = tightest;
+      gap = Math.min(gap, Math.max(scaled, tightest));
+    }
     radii.push((radii[depth - 1] ?? 0) + gap);
   }
-  return radii;
+  return { radii, outerFloor };
 }
 
 /**
@@ -272,7 +296,7 @@ export function computeLayout(tree: DescendantTree, requested: Settings): Layout
   };
   collect(top);
 
-  const baseRadii = generationRadii(maxDepth, requested);
+  const { radii: baseRadii, outerFloor } = generationRadii(maxDepth, requested);
   // The straight sides make the outer ring `shapeStretch` times as wide as tall.
   const outer = (baseRadii[maxDepth] ?? 0) + requested.cardLength / 2 + JUNCTION_DEPTH;
   const half = Math.max(requested.shapeStretch - 1, 0) * outer;
@@ -438,7 +462,8 @@ export function computeLayout(tree: DescendantTree, requested: Settings): Layout
     },
     extent: { halfWidth: half + reach, halfHeight: reach },
     cardLength,
-    pushedRings
+    pushedRings,
+    outerFloor
   };
 }
 

@@ -30,6 +30,7 @@
     "ringGap": "Шаг колец с 3-го",
     "ringGrowth": "Рост шага с каждым кольцом",
     "innerRingGap": "Шаг колец 1–2 (от центра)",
+    "outerRingScale": "Шаг двух внешних колец",
     "cardSpacing": "Зазор между карточками",
     "cardLength": "Длина карточки",
     "cardThickness": "Толщина карточки",
@@ -59,6 +60,7 @@
   "status": {
     "stats": "Показано: {people, plural, one {# человек} few {# человека} many {# человек} other {# человека}} · {families, plural, one {# семья} few {# семьи} many {# семей} other {# семьи}} · {generations, plural, one {# поколение} few {# поколения} many {# поколений} other {# поколения}}",
     "cardShortened": "карточки укорочены до {length} px, чтобы не заходить на соседнее кольцо",
+    "outerFloor": "шаг внешних колец не меньше {step} px — иначе карточки заденут друг друга",
     "ringsPushed": "{count, plural, one {кольцо {rings} отодвинуто} other {кольца {rings} отодвинуты}}, чтобы карточки поместились с заданным зазором",
     "rootOption": "{label} (потомков: {count})",
     "exporting": "Экспорт {size}…",

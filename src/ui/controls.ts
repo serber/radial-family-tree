@@ -46,7 +46,8 @@ export const controlGroups: ControlGroup[] = [
     titleKey: 'groups.layout',
     open: true,
     // The overall shape first, then from the center outwards: rings 1–2, the
-    // rings beyond, how those grow, then the spacing along each ring.
+    // rings beyond, how those grow, the two outermost, then the spacing along
+    // each ring.
     controls: [
       {
         kind: 'range',
@@ -68,6 +69,16 @@ export const controlGroups: ControlGroup[] = [
         labelKey: 'controls.ringGrowth',
         min: 100,
         max: 160,
+        toValue: (v) => v / 100,
+        toDisplay: (v) => Math.round(v * 100),
+        format: (v) => `${v}%`
+      },
+      {
+        kind: 'range',
+        key: 'outerRingScale',
+        labelKey: 'controls.outerRingScale',
+        min: 30,
+        max: 100,
         toValue: (v) => v / 100,
         toDisplay: (v) => Math.round(v * 100),
         format: (v) => `${v}%`

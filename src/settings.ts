@@ -17,6 +17,11 @@ export interface Settings {
   ringGap: number;
   /** Per-generation multiplier for the gap from ring 3 on — outer rings grow faster. */
   ringGrowth: number;
+  /**
+   * Factor (≤ 1) on the step of the two outermost rings, when there are more
+   * than four: the last generations are sparse and can sit closer.
+   */
+  outerRingScale: number;
   /** Arc length (px) kept free between neighbouring cards on a ring. */
   cardSpacing: number;
 
@@ -54,6 +59,7 @@ export const defaultSettings: Settings = {
   innerRingGap: 215,
   ringGap: 180,
   ringGrowth: 1,
+  outerRingScale: 1,
   cardSpacing: 10,
 
   cardLength: 145,

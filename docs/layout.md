@@ -16,12 +16,21 @@ r(g) = r(g-1) + gap(g)
 
 gap(g) = innerRingGap                           for g ≤ 2
 gap(g) = ringGap · ringGrowth^(g-3)             for g ≥ 3
+
+// on charts with more than 4 rings, the last two steps:
+gap(g) = min(gap(g), max(gap(g) · outerRingScale, cardLength + JUNCTION_DEPTH + 8))
 ```
 
 So the first two steps are both `innerRingGap` (the sparse core, tuned
 separately for readability), and from ring 3 on each gap is the previous one
 times `ringGrowth` (≥ 1, default 1 — the gaps **grow** outward, never decay).
 Crowding is handled by the ring floors below, so growth is only a look.
+
+The outermost generations are usually sparse, so «Шаг двух внешних колец»
+(`outerRingScale`) tightens just the last two steps. It stops at one card plus
+its stub: any tighter and the card length limit below would shorten every card
+in the chart, not only the outer ones. When it stops there, `Layout.outerFloor`
+is set and the status bar says so.
 
 These radii are what the sliders ask for. A ring moves further out only when
 its *own* cards don't fit it (see [Ring floors](#ring-floors)); it is never
@@ -255,6 +264,7 @@ interface Layout {
   extent: { halfWidth; halfHeight }; // for fit-to-view and export
   cardLength: number;    // card extent actually drawn (≤ the setting)
   pushedRings: number[]; // rings moved out past their slider step by a ring floor
+  outerFloor: number | null; // step the outer rings stopped at, if outerRingScale asked for less
 }
 ```
 

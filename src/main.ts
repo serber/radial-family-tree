@@ -63,6 +63,9 @@ function showStats(): void {
   if (layout && layout.cardLength < settings.cardLength) {
     notes.push(t('status.cardShortened', { length: Math.round(layout.cardLength) }));
   }
+  if (layout?.outerFloor) {
+    notes.push(t('status.outerFloor', { step: Math.round(layout.outerFloor) }));
+  }
   if (layout && layout.pushedRings.length) {
     notes.push(
       t('status.ringsPushed', { count: layout.pushedRings.length, rings: layout.pushedRings.join(', ') })
