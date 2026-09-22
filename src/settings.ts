@@ -1,12 +1,22 @@
 /** Visual & layout settings, adjustable from the side panel. */
 export interface Settings {
   // ---- Layout -------------------------------------------------------------
-  /** Gap (px) for the first two rings: root→1 and 1→2. Tunes the sparse core. */
-  innerRingGap: number;
-  /** Base gap (px) between rings, from ring 3 on. */
-  ringGap: number;
-  /** Per-generation multiplier for the gap from ring 3 on — outer rings grow faster. */
-  ringGrowth: number;
+  /**
+   * Width : height of the chart. 1 draws circles; above 1 the rings become
+   * stadiums (half circles joined by straight sides) around a central spine.
+   */
+  shapeStretch: number;
+  /**
+   * Fold a single line of descent at the top (root → only child → only child…)
+   * into the central core, so the first ring holds the first real branching.
+   */
+  collapseChain: boolean;
+  /**
+   * Step (px) of each ring from the previous one — ring 1 from the core — as
+   * set by hand. Rings past the end of the list use `defaultRingStep`. Kept per
+   * ring because density differs from tree to tree and ring to ring.
+   */
+  ringSteps: number[];
   /** Arc length (px) kept free between neighbouring cards on a ring. */
   cardSpacing: number;
 
@@ -39,9 +49,9 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
-  innerRingGap: 215,
-  ringGap: 180,
-  ringGrowth: 1.12,
+  shapeStretch: 1,
+  collapseChain: true,
+  ringSteps: [],
   cardSpacing: 10,
 
   cardLength: 145,
@@ -61,6 +71,19 @@ export const defaultSettings: Settings = {
   ringColor: '#d9d2c2',
   canvasColor: '#f7f4ee'
 };
+
+/**
+ * Step of ring `ring` (1-based) when none is set: roomier for the first two,
+ * where few cards sit and the core needs space.
+ */
+export function defaultRingStep(ring: number): number {
+  return ring <= 2 ? 215 : 180;
+}
+
+/** The step ring `ring` (1-based) actually asks for: set by hand, or the default. */
+export function ringStep(settings: Pick<Settings, 'ringSteps'>, ring: number): number {
+  return settings.ringSteps[ring - 1] ?? defaultRingStep(ring);
+}
 
 export interface PrintSize {
   /** Also the i18n key of the visible label: `printSizes.<key>`. */

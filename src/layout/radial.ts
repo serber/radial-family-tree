@@ -1,5 +1,15 @@
 import type { DescendantTree, PersonRef, TreeNode } from '../tree/build.ts';
-import type { Settings } from '../settings.ts';
+import { ringStep, type Settings } from '../settings.ts';
+import {
+  arcAt,
+  linkPoints,
+  locate,
+  perimeter,
+  project,
+  spotAt,
+  spotOfU,
+  type Track
+} from './track.ts';
 
 export interface Point {
   x: number;
@@ -27,8 +37,11 @@ export interface StubSlot {
 
 export interface PlacedNode {
   node: TreeNode;
+  /** The node the rings grow from — drawn as the central core, not as cards. */
   isRoot: boolean;
+  /** Direction of the outward normal at the node (radians); its local +x axis. */
   angle: number;
+  /** Distance from the spine (from the center, for a circle). */
   radius: number;
   position: Point;
   rotationDeg: number;
@@ -40,33 +53,62 @@ export interface PlacedNode {
 export interface PlacedLink {
   /** Id of the child node — stable key for D3 joins. */
   id: string;
+  /** Parent's junction (or the core's edge). */
   start: Point;
+  /** Middle of the inner edge of the child's blood-line card. */
   end: Point;
-  /** Unit tangent directions used to shape the curve. */
-  startDir: Point;
-  endDir: Point;
+  /** The line itself, `start` … `end`, bent along the rings (see `linkPoints`). */
+  points: Point[];
+}
+
+/** The central core: the root couple, plus the line of descent folded into it. */
+export interface Core {
+  /** The root family's spouses — one wedge (circle) or band (stadium) each. */
+  people: PersonRef[];
+  /** Each folded generation's visible people, top down; empty unless `collapseChain`. */
+  chain: PersonRef[][];
+  /** Distance of the core's edge from the spine — derived, not a setting. */
+  radius: number;
 }
 
 export interface Layout {
   nodes: PlacedNode[];
   links: PlacedLink[];
+  /** Distance of each ring's card centerline from the spine, ring 1 first. */
   rings: number[];
-  /** Radius of the central root disc — derived, not a setting. */
-  rootRadius: number;
-  /** Outer extent of the drawing, for fit-to-view and export. */
-  maxRadius: number;
+  /** Shape of the rings: a circle when `track.half` is 0, else a stadium. */
+  track: Track;
+  core: Core;
+  /** Half the drawing's width and height, for fit-to-view and export. */
+  extent: { halfWidth: number; halfHeight: number };
+  /**
+   * Radial card extent actually drawn: `settings.cardLength`, shortened when the
+   * rings are too close together for cards that long.
+   */
+  cardLength: number;
+  /**
+   * Rings (1 = innermost) that sit further out than the gap settings put them,
+   * because their own cards (with `cardSpacing`) didn't fit there.
+   */
+  pushedRings: number[];
+  /** Number of family blocks on each ring, ring 1 first — shown next to its step slider. */
+  ringCards: number[];
 }
 
 /** Length of the stub connecting a family block to its children fan-out. */
 const JUNCTION_DEPTH = 16;
 
+/** Smallest core radius; the core never shrinks below it. */
+const MIN_ROOT_RADIUS = 12;
+
+/** Free radial room between one ring's child junctions and the next ring's cards. */
+const RING_CLEARANCE = 8;
+
+/** Core radius «Плотно» (`compactSteps`) leaves room for, so the root names stay legible. */
+const COMPACT_CORE_RADIUS = 60;
+
 /** Inset of the marriage line from the cards' outer edge; the child stub starts here. */
 export const SPOUSE_LINE_INSET = 6;
-
-const polar = (angle: number, radius: number): Point => ({
-  x: Math.cos(angle) * radius,
-  y: Math.sin(angle) * radius
-});
 
 const localToGlobal = (origin: Point, angle: number, point: Point): Point => {
   const cos = Math.cos(angle);
@@ -78,26 +120,41 @@ const localToGlobal = (origin: Point, angle: number, point: Point): Point => {
 };
 
 /**
- * Ring radii per generation, derived purely from the layout settings — card
- * size deliberately plays no part, so resizing cards never moves a ring.
- * The first two gaps come from `innerRingGap`; from ring 3 on each gap is the
- * previous one times `ringGrowth`, because every further ring holds more cards.
+ * Ring distances per depth, straight from the per-ring steps (`ringSteps`,
+ * or each ring's default). Card size plays no part, so resizing cards never
+ * moves a ring.
  */
-function generationRadii(maxGeneration: number, settings: Settings): number[] {
+function generationRadii(maxDepth: number, settings: Settings): number[] {
   const radii = [0];
-  for (let gen = 1; gen <= maxGeneration; gen += 1) {
-    const gap =
-      gen <= 2 ? settings.innerRingGap : settings.ringGap * settings.ringGrowth ** (gen - 3);
-    radii.push((radii[gen - 1] ?? 0) + gap);
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    radii.push((radii[depth - 1] ?? 0) + ringStep(settings, depth));
   }
   return radii;
 }
 
-/** Root disc: as large as the inner gap allows while leaving the first ring's cards room. */
+/**
+ * Longest card that keeps neighbouring rings apart. Cards never move a ring, so
+ * when the rings sit closer than the cards are long, the cards give way: each
+ * card, its child stub and some clearance must fit between two rings, and the
+ * first ring's cards must leave room for the smallest core.
+ */
+function cardLengthLimit(radii: number[]): number {
+  let limit = Infinity;
+  const first = radii[1];
+  if (first !== undefined) {
+    limit = 2 * (first - MIN_ROOT_RADIUS - JUNCTION_DEPTH - RING_CLEARANCE);
+  }
+  for (let depth = 2; depth < radii.length; depth += 1) {
+    const gap = (radii[depth] ?? 0) - (radii[depth - 1] ?? 0);
+    limit = Math.min(limit, gap - JUNCTION_DEPTH - RING_CLEARANCE);
+  }
+  return Math.max(limit, 10);
+}
+
+/** Core: as large as the inner gap allows while leaving the first ring's cards room. */
 function rootRadiusFor(firstRingRadius: number, settings: Settings): number {
-  const clearance = 8;
-  const roomy = firstRingRadius - settings.cardLength / 2 - JUNCTION_DEPTH - clearance;
-  return Math.max(Math.min(firstRingRadius * 0.55, roomy), 12);
+  const roomy = firstRingRadius - settings.cardLength / 2 - JUNCTION_DEPTH - RING_CLEARANCE;
+  return Math.max(Math.min(firstRingRadius * 0.55, roomy), MIN_ROOT_RADIUS);
 }
 
 function visibleSpouses(node: TreeNode, settings: Settings): PersonRef[] {
@@ -118,35 +175,213 @@ function blockSize(node: TreeNode, settings: Settings): number {
 }
 
 /**
- * Two angular appetites per subtree, both measured in radians on the node's ring:
- *  - `need`: bare cards, touching. Below this they overlap — this is the only
- *    quantity allowed to push the rings outwards.
- *  - `want`: cards plus the requested `cardSpacing`. A wish, funded from whatever
- *    free angle the circle happens to have.
+ * Half the angle a block needs so that it stays `clearance` away from the rays
+ * bounding its sector. Cards are flat rectangles, not ring segments, so they
+ * are widest in angle at their inner corners (ρ = inner radius, ±b/2): the
+ * corner sits atan(b/2 / ρ) off the axis, and the ray must clear it by
+ * `clearance` measured perpendicular to the ray — asin(clearance / |corner|).
+ * Points further out only get further from the ray. Two blocks with touching
+ * sectors are therefore exactly 2·clearance apart at their nearest corners.
+ */
+function halfSpan(block: number, clearance: number, inner: number): number {
+  const rho = Math.max(inner, 1e-6);
+  const corner = Math.hypot(rho, block / 2);
+  return Math.atan(block / 2 / rho) + Math.asin(Math.min(clearance / corner, 1));
+}
+
+/**
+ * Half the room a block takes along its ring, measured as arc length on the
+ * cards' inner edge (distance ρ from the spine). Round the ends that is the
+ * angular half span times ρ; along a straight side, where neighbours stand
+ * parallel, it is plain b/2 + clearance. On a stadium a block may sit on either
+ * (or cross from one to the other), so it gets the larger of the two.
+ */
+function halfRoom(track: Track, block: number, clearance: number, inner: number): number {
+  const rho = Math.max(inner, 1e-6);
+  const round = halfSpan(block, clearance, rho) * rho;
+  return track.half > 0 ? Math.max(round, block / 2 + clearance) : round;
+}
+
+/**
+ * Two appetites per subtree, as fractions of the whole ring (the shared
+ * coordinate `u` runs 0…1 once round):
+ *  - `need`: bare cards, touching;
+ *  - `want`: cards plus the requested `cardSpacing`.
+ * They only shape the *ideal* positions (who sits over whom); overlap and
+ * spacing are guaranteed afterwards, ring by ring, by `ringFloor` and `spreadRing`.
  */
 interface Demand {
   need: number;
   want: number;
 }
 
-/** Angular span the node itself occupies on its ring. */
-function ownDemand(node: TreeNode, radius: number, settings: Settings): Demand {
-  // The root sits at radius 0 and draws no cards — it claims no arc of its own.
-  if (node.generation === 0) return { need: 0, want: 0 };
-  const r = Math.max(radius, 1);
-  const block = blockSize(node, settings);
-  return { need: block / r, want: (block + settings.cardSpacing) / r };
+/**
+ * Smallest distance at which one ring's cards, on their own, fit round it with
+ * full `cardSpacing` between them. Their room shrinks with distance while the
+ * ring grows, so bisect.
+ */
+function ringFloor(track: Track, blocks: number[], settings: Settings): number {
+  if (blocks.length === 0) return 0;
+  const half = settings.cardLength / 2;
+  const clearance = settings.cardSpacing / 2;
+  const fits = (d: number) => {
+    let total = 0;
+    for (const block of blocks) total += 2 * halfRoom(track, block, clearance, d - half);
+    return total <= perimeter(track, d - half);
+  };
+  // Both atan(x) ≤ x and asin(x) ≤ πx/2, so from here on the rooms fit a circle,
+  // and a stadium only adds its sides.
+  const arc = blocks.reduce((sum, b) => sum + b + (Math.PI * settings.cardSpacing) / 2, 0);
+  let hi = half + arc / (2 * Math.PI) + 1;
+  let lo = half;
+  if (fits(lo)) return lo;
+  for (let i = 0; i < 40; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid;
+    else lo = mid;
+  }
+  return hi;
 }
 
-/** Bottom-up pass: how much of the circle each subtree needs, and would like. */
-function computeDemands(
-  tree: DescendantTree,
-  radiusOf: (generation: number) => number,
-  settings: Settings
-): { demands: Map<TreeNode, Demand>; root: Demand } {
+/**
+ * The top of the chart: the root, followed — when `collapseChain` is on — by
+ * every only child that has children of its own. They all go into the core,
+ * and the rings start at the first generation that actually branches. (A lone
+ * son at the top would otherwise sit alone on the first ring, with his sons
+ * spread all round the chart, joined to him by lines half a circle long.)
+ */
+function coreChain(tree: DescendantTree, settings: Settings): TreeNode[] {
+  const chain = [tree.root];
+  let node = tree.root;
+  while (settings.collapseChain && node.children.length === 1 && node.children[0]!.children.length) {
+    node = node.children[0]!;
+    chain.push(node);
+  }
+  return chain;
+}
+
+/** The core chain, the node the rings grow from, and every node below it by ring (index = depth). */
+function ringStructure(tree: DescendantTree, settings: Settings) {
+  const chain = coreChain(tree, settings);
+  const top = chain[chain.length - 1]!;
+  const depthOf = (node: TreeNode) => node.generation - top.generation;
+  const maxDepth = tree.maxGeneration - top.generation;
+  const rings: TreeNode[][] = Array.from({ length: maxDepth + 1 }, () => []);
+  const collect = (node: TreeNode): void => {
+    if (node !== top) rings[depthOf(node)]!.push(node);
+    node.children.forEach(collect);
+  };
+  collect(top);
+  return { chain, top, depthOf, maxDepth, rings };
+}
+
+/** Half the straight sides: they make the outer ring `shapeStretch` times as wide as tall. */
+function stretchHalf(radii: number[], settings: Settings): number {
+  const outer = (radii[radii.length - 1] ?? 0) + settings.cardLength / 2 + JUNCTION_DEPTH;
+  return Math.max(settings.shapeStretch - 1, 0) * outer;
+}
+
+/**
+ * The tightest step for every ring of this tree («Плотно»): each ring as close
+ * to the previous one as a card plus its stub allows — any closer and cards
+ * would be shortened — unless its own cards need more room round the ring
+ * (its floor), and ring 1 far enough out to leave a legible core. With these
+ * steps no card is shortened and no ring has to be pushed. The straight sides
+ * of a stadium scale with the outer ring, and so change the floors, so repeat
+ * until the steps settle.
+ */
+export function compactSteps(tree: DescendantTree, settings: Settings): number[] {
+  const { maxDepth, rings } = ringStructure(tree, settings);
+  const tightest = settings.cardLength + JUNCTION_DEPTH + RING_CLEARANCE;
+  const firstRing = settings.cardLength / 2 + JUNCTION_DEPTH + RING_CLEARANCE + COMPACT_CORE_RADIUS;
+  let radii = generationRadii(maxDepth, settings);
+  let steps: number[] = [];
+  for (let round = 0; round < 12; round += 1) {
+    const track: Track = { half: stretchHalf(radii, settings), ref: 1 };
+    const next = [0];
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const blocks = rings[depth]!.map((node) => blockSize(node, settings));
+      const least = depth === 1 ? firstRing : (next[depth - 1] ?? 0) + tightest;
+      next.push(Math.max(least, ringFloor(track, blocks, settings)));
+    }
+    // Whole pixels, rounded up, so the layout finds every floor already met.
+    const nextSteps = next.slice(1).map((r, i) => Math.ceil(r - (next[i] ?? 0)));
+    const settled = nextSteps.every((step, i) => step === steps[i]);
+    steps = nextSteps;
+    radii = generationRadii(maxDepth, { ...settings, ringSteps: steps });
+    if (settled) break;
+  }
+  return steps;
+}
+
+export function computeLayout(tree: DescendantTree, requested: Settings): Layout {
+  const { chain, top, depthOf, maxDepth, rings } = ringStructure(tree, requested);
+
+  const baseRadii = generationRadii(maxDepth, requested);
+  const half = stretchHalf(baseRadii, requested);
+
+  /**
+   * Final ring distances for a card length. Each ring sits at its settings-given
+   * gap from the previous one unless its *own* cards need more room — then it
+   * moves out just far enough, and the rings beyond keep their gaps to it. A
+   * crowded ring therefore never inflates the rings inside it.
+   */
+  const ringRadii = (settings: Settings): number[] => {
+    const track: Track = { half, ref: 1 };
+    const radii = [0];
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const gap = (baseRadii[depth] ?? 0) - (baseRadii[depth - 1] ?? 0);
+      const blocks = rings[depth]!.map((node) => blockSize(node, settings));
+      radii.push(Math.max((radii[depth - 1] ?? 0) + gap, ringFloor(track, blocks, settings)));
+    }
+    return radii;
+  };
+
+  // Card length and ring distances depend on each other: a longer card needs
+  // more room (its inner edge sits lower), which may push rings out, which leaves
+  // room for a longer card. Both only grow, so iterate to a fixed point starting
+  // from the base distances. Rings are always recomputed for the final length,
+  // so the result is valid even if the loop stops early.
+  const withLength = (length: number): Settings => ({ ...requested, cardLength: length });
+  let cardLength = Math.min(requested.cardLength, cardLengthLimit(baseRadii));
+  let radii = ringRadii(withLength(cardLength));
+  for (let i = 0; i < 8 && cardLength < requested.cardLength; i += 1) {
+    const longer = Math.min(requested.cardLength, cardLengthLimit(radii));
+    if (longer <= cardLength + 0.5) break;
+    cardLength = longer;
+    radii = ringRadii(withLength(cardLength));
+  }
+  const settings = withLength(cardLength);
+  const pushedRings: number[] = [];
+  for (let depth = 1; depth < radii.length; depth += 1) {
+    const gap = (baseRadii[depth] ?? 0) - (baseRadii[depth - 1] ?? 0);
+    if ((radii[depth] ?? 0) > (radii[depth - 1] ?? 0) + gap + 0.5) pushedRings.push(depth);
+  }
+
+  const radiusOf = (node: TreeNode) => radii[depthOf(node)] ?? 0;
+  const innerOf = (node: TreeNode) => radiusOf(node) - settings.cardLength / 2;
+  // The shared coordinate is weighed on the outermost ring's inner edge, where
+  // the cards are usually most crowded, so that is where ideal spacing is truest.
+  const track: Track = {
+    half,
+    ref: Math.max((radii[maxDepth] ?? 0) - settings.cardLength / 2, 1)
+  };
+  const rootRadius = rootRadiusFor(radii[1] ?? MIN_ROOT_RADIUS * 4, settings);
+  const clearance = settings.cardSpacing / 2;
+
+  // Bottom-up: how much of its own ring each subtree needs, and would like.
   const demands = new Map<TreeNode, Demand>();
   const walk = (node: TreeNode): Demand => {
-    const own = ownDemand(node, radiusOf(node.generation), settings);
+    let own: Demand = { need: 0, want: 0 };
+    if (node !== top) {
+      const inner = innerOf(node);
+      const ring = perimeter(track, inner);
+      const block = blockSize(node, settings);
+      own = {
+        need: (2 * halfRoom(track, block, 0, inner)) / ring,
+        want: (2 * halfRoom(track, block, clearance, inner)) / ring
+      };
+    }
     let childNeed = 0;
     let childWant = 0;
     for (const child of node.children) {
@@ -160,71 +395,15 @@ function computeDemands(
     demands.set(node, demand);
     return demand;
   };
-  return { demands, root: walk(tree.root) };
-}
-
-export function computeLayout(tree: DescendantTree, settings: Settings): Layout {
-  const full = 2 * Math.PI;
-  const baseRadii = generationRadii(tree.maxGeneration, settings);
-  const needAt = (scale: number) =>
-    computeDemands(tree, (generation) => (baseRadii[generation] ?? 0) * scale, settings).root.need;
-
-  // Rings only ever grow to stop cards from *overlapping* — `cardSpacing` is
-  // never a reason to. When even bare cards don't fit the circle, find the
-  // smallest factor that makes them fit by bisection (demand falls as ~1/radius):
-  // anything less would overlap, anything more wastes the sheet.
-  let scale = 1;
-  if (needAt(1) > full) {
-    let hi = 2;
-    while (hi < 4096 && needAt(hi) > full) hi *= 2;
-    let lo = 1;
-    for (let i = 0; i < 40; i += 1) {
-      const mid = (lo + hi) / 2;
-      if (needAt(mid) > full) lo = mid;
-      else hi = mid;
-    }
-    scale = hi;
-  }
-
-  const scaled = baseRadii.map((r) => r * scale);
-
-  // Total circumference each ring wants for full `cardSpacing`, and the bare
-  // minimum its cards occupy. Both are radius-independent (pure px along the arc).
-  const wantArc: number[] = baseRadii.map(() => 0);
-  const walkArcs = (node: TreeNode): void => {
-    if (node.generation > 0) {
-      wantArc[node.generation]! += blockSize(node, settings) + settings.cardSpacing;
-    }
-    node.children.forEach(walkArcs);
-  };
-  walkArcs(tree.root);
-
-  // Grow a ring only when its own cards can't get the requested spacing within
-  // the full circle — and only up to GROWTH_CAP× its base radius. Inner rings
-  // that already have room keep their radius; a crowded outer ring pushes itself
-  // (and everything beyond it, to preserve the gaps) outward, never the reverse.
-  const GROWTH_CAP = 1.5;
-  const radii = [0];
-  for (let gen = 1; gen <= tree.maxGeneration; gen += 1) {
-    const base = scaled[gen] ?? 0;
-    const gap = base - (scaled[gen - 1] ?? 0);
-    const wantRadius = Math.min((wantArc[gen] ?? 0) / full, base * GROWTH_CAP);
-    radii.push(Math.max(base, wantRadius, (radii[gen - 1] ?? 0) + gap));
-  }
-
-  const radiusOf = (generation: number) => radii[generation] ?? 0;
-  const { demands } = computeDemands(tree, radiusOf, settings);
-  const rootRadius = rootRadiusFor(radiusOf(1), settings);
-
+  walk(top);
   const demandOf = (node: TreeNode): Demand => demands.get(node) ?? { need: 0, want: 0 };
 
   /**
-   * Splits a parent's angular window between its children. Every child is first
-   * guaranteed the angle it needs not to overlap; the leftover then buys as much
-   * of the requested `cardSpacing` as it covers, shared in proportion to how much
-   * each child asked for. The fraction is solved *per parent*, not once globally,
-   * so a packed branch cannot starve a sparse one on the other side of the tree —
-   * each region spends the slack that sits above it.
+   * Splits a parent's window between its children: first each child's bare
+   * `need`, then the leftover towards their `want`, in proportion to how much
+   * each asked for. Solved *per parent*, so a packed branch cannot starve a
+   * sparse one on the other side of the tree. The windows only set ideal
+   * positions — `spreadRing` enforces the actual spacing.
    */
   const splitWindow = (children: TreeNode[], window: number): number[] => {
     const ds = children.map(demandOf);
@@ -241,52 +420,167 @@ export function computeLayout(tree: DescendantTree, settings: Settings): Layout 
     return ds.map((d) => d.need + (d.want - d.need) * fill);
   };
 
-  const nodes: PlacedNode[] = [];
-  const links: PlacedLink[] = [];
-
-  // Top-down: split each node's angular window between children proportionally.
-  const place = (node: TreeNode, start: number, end: number): PlacedNode => {
-    const placed = placeNode(node, (start + end) / 2, radiusOf(node.generation), settings);
-    nodes.push(placed);
-
+  // Top-down: split each node's window between its children. This gives every
+  // node its *ideal* position u — centered over its own family.
+  const ideal = new Map<TreeNode, number>();
+  const assign = (node: TreeNode, start: number, end: number): void => {
+    ideal.set(node, (start + end) / 2);
     const spans = splitWindow(node.children, end - start);
     let cursor = start;
     node.children.forEach((child, i) => {
       const span = spans[i] ?? 0;
-      const placedChild = place(child, cursor, cursor + span);
-      links.push(makeLink(placed, placedChild, rootRadius));
+      assign(child, cursor, cursor + span);
       cursor += span;
     });
+  };
+  assign(top, 0, 1);
+
+  // Windows reach through every ring, so where an outer ring is packed the
+  // cards of the inner rings get squeezed too, though their own ring is roomy.
+  // Each ring is therefore spread on its own: cards slide along its inner edge,
+  // as little as possible, until neighbours are `cardSpacing` apart.
+  // `ringFloor` sized every ring for exactly that, so the spread always succeeds.
+  const placedAt = new Map<TreeNode, { position: Point; normal: number }>();
+  rings.forEach((ring, depth) => {
+    if (depth === 0 || ring.length === 0) return;
+    const inner = (radii[depth] ?? 0) - settings.cardLength / 2;
+    const arcs = ring.map((node) => arcAt(track, spotOfU(track, ideal.get(node) ?? 0), inner));
+    const halves = ring.map((node) => halfRoom(track, blockSize(node, settings), clearance, inner));
+    const spread = spreadRing(arcs, halves, perimeter(track, inner));
+    ring.forEach((node, i) => {
+      const at = locate(track, spotAt(track, spread[i] ?? 0, inner), radii[depth] ?? 0);
+      placedAt.set(node, { position: at.point, normal: at.normal });
+    });
+  });
+
+  const nodes: PlacedNode[] = [];
+  const links: PlacedLink[] = [];
+  const place = (node: TreeNode): PlacedNode => {
+    const placed =
+      node === top
+        ? rootNode(node)
+        : placeNode(node, placedAt.get(node)!, radiusOf(node), settings);
+    nodes.push(placed);
+    for (const child of node.children) {
+      links.push(makeLink(track, placed, place(child), rootRadius));
+    }
     return placed;
   };
-  place(tree.root, -Math.PI, Math.PI);
+  place(top);
 
+  const reach = (radii[maxDepth] ?? rootRadius) + (maxDepth > 0 ? cardLength / 2 + JUNCTION_DEPTH : 0);
   return {
     nodes,
     links,
     rings: radii.slice(1),
-    rootRadius,
-    maxRadius: radiusOf(tree.maxGeneration) + settings.cardLength / 2 + JUNCTION_DEPTH
+    track,
+    core: {
+      people: tree.root.spouses,
+      chain: chain.slice(1).map((node) => visibleSpouses(node, settings)),
+      radius: rootRadius
+    },
+    extent: { halfWidth: half + reach, halfHeight: reach },
+    cardLength,
+    pushedRings,
+    ringCards: rings.slice(1).map((ring) => ring.length)
   };
 }
 
-function placeNode(node: TreeNode, angle: number, radius: number, settings: Settings): PlacedNode {
-  const isRoot = node.generation === 0;
-  const position = polar(angle, radius);
+/**
+ * Moves the nodes of one ring along it, keeping their circular order, so that
+ * neighbours i and i+1 are at least `halves[i] + halves[i+1]` apart, while the
+ * total squared shift from `ideals` is as small as possible. All values are arc
+ * lengths on a ring of length `period`.
+ *
+ * With cumulative offsets c (c₀ = 0, cᵢ₊₁ = cᵢ + dᵢ) the positions are
+ * xᵢ = yᵢ + cᵢ and the spacing constraints become "y is non-decreasing" — an
+ * isotonic regression of zᵢ = idealᵢ − cᵢ, solved by pool-adjacent-violators.
+ * Closing the ring adds y_last − y_first ≤ slack (the free length); with a
+ * constant bound the solution is the unbounded one clipped to [a, a + slack],
+ * and the best offset `a` is found by ternary search (the cost is convex in a).
+ * The ring is cut at the widest gap between ideals, where nothing is crowded.
+ */
+function spreadRing(ideals: number[], halves: number[], period: number): number[] {
+  const n = ideals.length;
+  if (n <= 1) return ideals.slice();
 
-  if (isRoot) {
-    return {
-      node,
-      isRoot,
-      angle,
-      radius,
-      position: { x: 0, y: 0 },
-      rotationDeg: 0,
-      cards: [],
-      stubs: []
-    };
+  const norm = (a: number) => ((a % period) + period) % period;
+  const order = ideals.map((_, i) => i).sort((a, b) => norm(ideals[a]!) - norm(ideals[b]!));
+  let cut = 0;
+  let widest = -1;
+  for (let k = 0; k < n; k += 1) {
+    const prev = norm(ideals[order[(k - 1 + n) % n]!]!);
+    const gap = norm(norm(ideals[order[k]!]!) - prev) || (k === 0 ? period : 0);
+    if (gap > widest) {
+      widest = gap;
+      cut = k;
+    }
+  }
+  const seq = [...order.slice(cut), ...order.slice(0, cut)];
+
+  // Unwrapped ideal positions, increasing from the cut.
+  const start = norm(ideals[seq[0]!]!);
+  const t = seq.map((i) => start + norm(norm(ideals[i]!) - start));
+  const c = [0];
+  for (let k = 1; k < n; k += 1) {
+    c.push(c[k - 1]! + halves[seq[k - 1]!]! + halves[seq[k]!]!);
+  }
+  const wrap = halves[seq[n - 1]!]! + halves[seq[0]!]!;
+  const slack = Math.max(period - c[n - 1]! - wrap, 0);
+  const z = t.map((value, k) => value - c[k]!);
+
+  // Pool-adjacent-violators: runs sharing one fitted value (their mean), merged
+  // with the previous run while the means would decrease.
+  const sums: number[] = [];
+  const counts: number[] = [];
+  const mean = (run: number) => sums[run]! / counts[run]!;
+  for (const value of z) {
+    sums.push(value);
+    counts.push(1);
+    while (sums.length > 1 && mean(sums.length - 2) > mean(sums.length - 1)) {
+      const sum = sums.pop()!;
+      const count = counts.pop()!;
+      sums[sums.length - 1]! += sum;
+      counts[counts.length - 1]! += count;
+    }
+  }
+  const fit: number[] = [];
+  sums.forEach((_, run) => {
+    for (let k = 0; k < counts[run]!; k += 1) fit.push(mean(run));
+  });
+
+  let y = fit;
+  if (fit[n - 1]! - fit[0]! > slack) {
+    const clipAt = (a: number) => fit.map((v) => Math.min(Math.max(v, a), a + slack));
+    const cost = (a: number) => clipAt(a).reduce((sum, v, k) => sum + (v - z[k]!) ** 2, 0);
+    let lo = fit[0]!;
+    let hi = fit[n - 1]! - slack;
+    for (let i = 0; i < 100; i += 1) {
+      const m1 = lo + (hi - lo) / 3;
+      const m2 = hi - (hi - lo) / 3;
+      if (cost(m1) <= cost(m2)) hi = m2;
+      else lo = m1;
+    }
+    y = clipAt((lo + hi) / 2);
   }
 
+  const result = new Array<number>(n);
+  seq.forEach((i, k) => {
+    result[i] = y[k]! + c[k]!;
+  });
+  return result;
+}
+
+function rootNode(node: TreeNode): PlacedNode {
+  return { node, isRoot: true, angle: 0, radius: 0, position: { x: 0, y: 0 }, rotationDeg: 0, cards: [], stubs: [] };
+}
+
+function placeNode(
+  node: TreeNode,
+  at: { position: Point; normal: number },
+  radius: number,
+  settings: Settings
+): PlacedNode {
   const spouses = visibleSpouses(node, settings);
   const width = settings.cardLength;
   const height = settings.cardThickness;
@@ -348,43 +642,30 @@ function placeNode(node: TreeNode, angle: number, radius: number, settings: Sett
 
   return {
     node,
-    isRoot,
-    angle,
+    isRoot: false,
+    angle: at.normal,
     radius,
-    position,
-    rotationDeg: (angle * 180) / Math.PI,
+    position: at.position,
+    rotationDeg: (at.normal * 180) / Math.PI,
     cards,
     stubs
   };
 }
 
-function makeLink(parent: PlacedNode, child: PlacedNode, rootRadius: number): PlacedLink {
+function makeLink(track: Track, parent: PlacedNode, child: PlacedNode, rootRadius: number): PlacedLink {
   const entryCard = child.cards.find((c) => c.isEntry) ?? child.cards[0];
   const end = entryCard
     ? localToGlobal(child.position, child.angle, { x: entryCard.x, y: entryCard.y + entryCard.height / 2 })
     : child.position;
-  const endDir = { x: -Math.cos(child.angle), y: -Math.sin(child.angle) };
 
+  let start: Point;
   if (parent.isRoot) {
-    const dist = Math.hypot(end.x, end.y) || 1;
-    const dir = { x: end.x / dist, y: end.y / dist };
-    return {
-      id: child.node.id,
-      start: { x: dir.x * rootRadius, y: dir.y * rootRadius },
-      end,
-      startDir: dir,
-      endDir
-    };
+    // Straight out of the core, along the child's normal.
+    start = locate(track, project(track, end), rootRadius).point;
+  } else {
+    // Hang off the stub of the union this child actually descends from.
+    const stub = parent.stubs.find((s) => s.familyId === child.node.parentFamilyId) ?? parent.stubs[0];
+    start = localToGlobal(parent.position, parent.angle, stub?.junction ?? { x: 0, y: 0 });
   }
-
-  // Hang off the stub of the union this child actually descends from.
-  const stub = parent.stubs.find((s) => s.familyId === child.node.parentFamilyId) ?? parent.stubs[0];
-  const junction = stub?.junction ?? { x: 0, y: 0 };
-  return {
-    id: child.node.id,
-    start: localToGlobal(parent.position, parent.angle, junction),
-    end,
-    startDir: { x: Math.cos(parent.angle), y: Math.sin(parent.angle) },
-    endDir
-  };
+  return { id: child.node.id, start, end, points: linkPoints(track, start, end) };
 }

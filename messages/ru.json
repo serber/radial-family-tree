@@ -6,13 +6,16 @@
   },
   "legend": {
     "male": "Мужчины",
-    "female": "Женщины"
+    "female": "Женщины",
+    "unknown": "Пол не указан"
   },
   "actions": {
     "load": "Загрузить GEDCOM",
     "sample": "Пример",
     "export": "Скачать JPEG",
-    "fit": "Вписать в экран"
+    "fit": "Вписать в экран",
+    "compactRings": "Плотно",
+    "resetRings": "Сбросить"
   },
   "fields": {
     "rootFamily": "Корневая семья",
@@ -20,14 +23,14 @@
   },
   "groups": {
     "layout": "Компоновка",
+    "rings": "Кольца",
     "card": "Карточка",
     "style": "Стиль"
   },
   "controls": {
-    "ringGap": "Расстояние между кольцами",
-    "ringGrowth": "Рост внешних колец",
-    "innerRingGap": "Расстояние между кольцами 1 и 2",
-    "cardSpacing": "Расстояние между карточками",
+    "shapeStretch": "Вытянутость (100% — круг)",
+    "collapseChain": "Одиночную линию — в центр",
+    "cardSpacing": "Зазор между карточками",
     "cardLength": "Длина карточки",
     "cardThickness": "Толщина карточки",
     "fontSize": "Размер шрифта",
@@ -42,7 +45,8 @@
     "lineWidth": "Толщина линии",
     "showRings": "Кольца поколений",
     "ringColor": "Цвет колец",
-    "canvasColor": "Цвет холста"
+    "canvasColor": "Цвет холста",
+    "ringStep": "Кольцо {ring} · {count, plural, one {# карточка} few {# карточки} many {# карточек} other {# карточки}}"
   },
   "printSizes": {
     "a3": "A3 (300 DPI) — 4961 × 3508",
@@ -55,6 +59,8 @@
   },
   "status": {
     "stats": "Показано: {people, plural, one {# человек} few {# человека} many {# человек} other {# человека}} · {families, plural, one {# семья} few {# семьи} many {# семей} other {# семьи}} · {generations, plural, one {# поколение} few {# поколения} many {# поколений} other {# поколения}}",
+    "cardShortened": "карточки укорочены до {length} px, чтобы не заходить на соседнее кольцо",
+    "ringsPushed": "{count, plural, one {кольцо {rings} отодвинуто} other {кольца {rings} отодвинуты}}, чтобы карточки поместились с заданным зазором",
     "rootOption": "{label} (потомков: {count})",
     "exporting": "Экспорт {size}…",
     "saved": "Сохранено: {size}",

@@ -115,7 +115,8 @@ h1 {
 
 .legend {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 6px 18px;
   margin-top: 14px;
   font-size: 12.5px;
   color: #565247;
@@ -141,6 +142,15 @@ h1 {
 
 .legend__swatch--female {
   background: var(--female);
+}
+
+.legend__swatch--unknown {
+  background: #e9e6dd; /* palette.unknown.fill */
+}
+
+/* Beats the flex display of `.legend span`. */
+.legend [hidden] {
+  display: none;
 }
 
 /* ---------- fields & selects ---------- */
@@ -240,6 +250,23 @@ h1 {
 .data-actions {
   display: flex;
   gap: 10px;
+}
+
+/* The ring sliders sit in their own wrapper, so repeat the panel body's rhythm. */
+.ring-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* «Плотно» / «Сбросить» above the per-ring step sliders. */
+.ring-steps__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ring-steps__actions .btn {
+  flex: 1;
 }
 
 .link-btn {

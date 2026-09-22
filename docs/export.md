@@ -22,17 +22,19 @@ screen presets:
 ## How it works
 
 ```
-live SVG ──clone──▶ clone without zoom transform ──viewBox from maxRadius──▶
+live SVG ──clone──▶ clone without zoom transform ──viewBox from extent──▶
 XMLSerializer ──▶ Blob (image/svg+xml) ──▶ <img> ──▶ canvas (canvasColor bg) ──▶ toBlob('image/jpeg', 0.95)
 ```
 
 1. **Cloning.** The live SVG is cloned whole; the `.zoom-layer` transform is
    removed from the clone — the export always shows the entire tree and does
    not depend on the on-screen zoom.
-2. **Framing.** The content square side comes from `layout.maxRadius` (the
-   layout's outer extent) with a 4 % margin; the square is then fitted into
-   the print sheet proportions (contain, centered) — that becomes the clone's
-   `viewBox`. The scale is deterministic: computed from geometry, not from
+2. **Framing.** The content rectangle comes from `layout.extent` (half width
+   and height of the drawing — wider than tall for a stadium) with a 4 %
+   margin; it is then fitted into the print sheet proportions (contain,
+   centered) — that becomes the clone's `viewBox`. A stadium at
+   «Вытянутость» ≈ 141 % fills a landscape A-sheet; a circle leaves its sides
+   empty. The scale is deterministic: computed from geometry, not from
    screen state.
 3. **Fonts.** The chart uses Spectral (a web font), and the rasterizing
    `<img>` cannot load external resources — so the export fetches the Google

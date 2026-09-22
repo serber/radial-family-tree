@@ -26,13 +26,20 @@ npm run preview  # local preview of the build
   (`examples/example-large.ged`).
 - Root family selection from a list (progenitors first, sorted by descendant
   count).
-- Adjustable geometry (ring gaps, outer-ring growth, card size and spacing)
+- Adjustable geometry (a step for every ring with a one-click «Плотно»,
+  card size and spacing)
   and styling (colors, font, lines, canvas) — everything recomputes live, zoom
   is preserved.
+- Two shapes: a circle, or — for wide sheets and large trees — a stadium
+  (half circles joined by straight sides), where descendants stand in
+  columns along the sides and fan out round the ends.
+- A single line of descent at the top (a root with one son, who has one
+  son…) is folded into the center, so the first ring is the first real
+  branching.
 - Remarriages: a person married several times keeps one card, with their
   spouses fanned out beside it and each marriage's children on their own
   branch.
-- Names never render upside down on the left half of the circle; card
+- Names never render upside down on the left half of the chart; card
   tooltips show life years; a marriage line connects spouse cards.
 - Zoom/pan, fit-to-view.
 - Print-ready JPEG export A3–A0 (300 DPI) plus screen presets (Full HD, 4K,

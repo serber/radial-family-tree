@@ -95,7 +95,7 @@ src/
   settings.ts     Settings type, defaults, print sizes
   errors.ts       AppError with translation codes
   i18n/           t(), locale switching (intl-messageformat)
-  gedcom/         GEDCOM parser (types, parser, sample)
+  gedcom/         GEDCOM decoding and parser (types, decode, parser, sample)
   tree/           descendant tree (build)
   layout/         radial layout (radial)
   render/         TreeRenderer + palette (renderer, palette)
