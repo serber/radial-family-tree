@@ -26,7 +26,8 @@ npm run preview  # local preview of the build
   (`examples/example-large.ged`).
 - Root family selection from a list (progenitors first, sorted by descendant
   count).
-- Adjustable geometry (ring gaps, outer-ring growth, card size and spacing)
+- Adjustable geometry (a step for every ring with a one-click «Плотно»,
+  card size and spacing)
   and styling (colors, font, lines, canvas) — everything recomputes live, zoom
   is preserved.
 - Two shapes: a circle, or — for wide sheets and large trees — a stadium

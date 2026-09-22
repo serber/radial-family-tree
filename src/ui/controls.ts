@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.ts';
-import type { Settings } from '../settings.ts';
+import { defaultRingStep, ringStep, type Settings } from '../settings.ts';
 
 type KeysOfType<T, V> = { [K in keyof T]-?: T[K] extends V ? K : never }[keyof T];
 export type NumericSettingKey = KeysOfType<Settings, number>;
@@ -33,7 +33,22 @@ export interface ToggleControl {
   labelKey: string;
 }
 
-export type ControlDef = RangeControl | ColorControl | ToggleControl;
+/** One step slider per ring of the current chart, plus «Плотно» / «Сбросить». */
+export interface RingStepsControl {
+  kind: 'ringSteps';
+}
+
+export type ControlDef = RangeControl | ColorControl | ToggleControl | RingStepsControl;
+
+/** What the ring group needs to know about the chart on screen, and can ask of it. */
+export interface RingPanel {
+  /** Family blocks on each ring, ring 1 first; its length is the number of rings. */
+  cards: number[];
+  /** Fill every ring's step with the tightest this tree allows. */
+  compact: () => void;
+  /** Back to the default steps. */
+  reset: () => void;
+}
 
 export interface ControlGroup {
   titleKey: string;
@@ -45,9 +60,8 @@ export const controlGroups: ControlGroup[] = [
   {
     titleKey: 'groups.layout',
     open: true,
-    // The overall shape first, then from the center outwards: rings 1–2, the
-    // rings beyond, how those grow, the two outermost, then the spacing along
-    // each ring.
+    // The overall shape first, then the spacing along each ring; the step of
+    // every ring has a group of its own («Кольца»).
     controls: [
       {
         kind: 'range',
@@ -61,30 +75,13 @@ export const controlGroups: ControlGroup[] = [
         format: (v) => `${v}%`
       },
       { kind: 'toggle', key: 'collapseChain', labelKey: 'controls.collapseChain' },
-      { kind: 'range', key: 'innerRingGap', labelKey: 'controls.innerRingGap', min: 60, max: 600 },
-      { kind: 'range', key: 'ringGap', labelKey: 'controls.ringGap', min: 60, max: 500 },
-      {
-        kind: 'range',
-        key: 'ringGrowth',
-        labelKey: 'controls.ringGrowth',
-        min: 100,
-        max: 160,
-        toValue: (v) => v / 100,
-        toDisplay: (v) => Math.round(v * 100),
-        format: (v) => `${v}%`
-      },
-      {
-        kind: 'range',
-        key: 'outerRingScale',
-        labelKey: 'controls.outerRingScale',
-        min: 30,
-        max: 100,
-        toValue: (v) => v / 100,
-        toDisplay: (v) => Math.round(v * 100),
-        format: (v) => `${v}%`
-      },
       { kind: 'range', key: 'cardSpacing', labelKey: 'controls.cardSpacing', min: 0, max: 160 }
     ]
+  },
+  {
+    titleKey: 'groups.rings',
+    open: true,
+    controls: [{ kind: 'ringSteps' }]
   },
   {
     titleKey: 'groups.card',
@@ -123,7 +120,8 @@ export const controlGroups: ControlGroup[] = [
 export function buildSettingsPanel(
   container: HTMLElement,
   settings: Settings,
-  onChange: () => void
+  onChange: () => void,
+  rings: RingPanel
 ): void {
   const previousOpen = [...container.querySelectorAll('details')].map((d) => d.open);
   container.replaceChildren();
@@ -140,15 +138,22 @@ export function buildSettingsPanel(
     const body = document.createElement('div');
     body.className = 'panel__body';
     for (const def of group.controls) {
-      body.append(createControl(def, settings, onChange));
+      body.append(createControl(def, settings, onChange, rings));
     }
     details.append(body);
     container.append(details);
   });
 }
 
-function createControl(def: ControlDef, settings: Settings, onChange: () => void): HTMLElement {
+function createControl(
+  def: ControlDef,
+  settings: Settings,
+  onChange: () => void,
+  rings: RingPanel
+): HTMLElement {
   switch (def.kind) {
+    case 'ringSteps':
+      return createRingSteps(settings, onChange, rings);
     case 'range':
       return createRange(def, settings, onChange);
     case 'color':
@@ -232,5 +237,57 @@ function createToggle(def: ToggleControl, settings: Settings, onChange: () => vo
   });
 
   root.append(span, input, switchEl);
+  return root;
+}
+
+/**
+ * The ring group: «Плотно» and «Сбросить», then one step slider per ring,
+ * labelled with how many cards sit on it — density differs from tree to tree
+ * and ring to ring, and this is where it shows.
+ */
+function createRingSteps(settings: Settings, onChange: () => void, rings: RingPanel): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'ring-steps';
+
+  const actions = document.createElement('div');
+  actions.className = 'ring-steps__actions';
+  const button = (labelKey: string, action: () => void) => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'btn';
+    el.textContent = t(labelKey);
+    el.addEventListener('click', action);
+    return el;
+  };
+  actions.append(button('actions.compactRings', rings.compact), button('actions.resetRings', rings.reset));
+  root.append(actions);
+
+  rings.cards.forEach((count, i) => {
+    const ring = i + 1;
+    const value = ringStep(settings, ring);
+    // Room above the current step, however far «Плотно» took it.
+    const max = Math.max(600, Math.ceil((value + 100) / 50) * 50);
+    const { root: control, output } = controlShell(t('controls.ringStep', { ring, count }));
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = '60';
+    input.max = String(max);
+    input.value = String(value);
+    output.textContent = String(value);
+    input.addEventListener('input', () => {
+      const step = Number(input.value);
+      if (Number.isNaN(step)) return;
+      // A fresh array: `settings` starts as a shallow copy of the defaults.
+      const steps = Array.from({ length: Math.max(settings.ringSteps.length, ring) }, (_, k) =>
+        settings.ringSteps[k] ?? defaultRingStep(k + 1)
+      );
+      steps[ring - 1] = step;
+      settings.ringSteps = steps;
+      output.textContent = String(step);
+      onChange();
+    });
+    control.append(input);
+    root.append(control);
+  });
   return root;
 }

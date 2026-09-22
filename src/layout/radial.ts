@@ -1,5 +1,5 @@
 import type { DescendantTree, PersonRef, TreeNode } from '../tree/build.ts';
-import type { Settings } from '../settings.ts';
+import { ringStep, type Settings } from '../settings.ts';
 import {
   arcAt,
   linkPoints,
@@ -91,11 +91,8 @@ export interface Layout {
    * because their own cards (with `cardSpacing`) didn't fit there.
    */
   pushedRings: number[];
-  /**
-   * Set when «Шаг двух внешних колец» asked for less than one card plus its
-   * stub: the step it stopped at instead (px). Null when the slider is honoured.
-   */
-  outerFloor: number | null;
+  /** Number of family blocks on each ring, ring 1 first — shown next to its step slider. */
+  ringCards: number[];
 }
 
 /** Length of the stub connecting a family block to its children fan-out. */
@@ -107,8 +104,8 @@ const MIN_ROOT_RADIUS = 12;
 /** Free radial room between one ring's child junctions and the next ring's cards. */
 const RING_CLEARANCE = 8;
 
-/** «Шаг двух внешних колец» only applies to charts with more rings than this. */
-const OUTER_MIN_RINGS = 4;
+/** Core radius «Плотно» (`compactSteps`) leaves room for, so the root names stay legible. */
+const COMPACT_CORE_RADIUS = 60;
 
 /** Inset of the marriage line from the cards' outer edge; the child stub starts here. */
 export const SPOUSE_LINE_INSET = 6;
@@ -123,35 +120,16 @@ const localToGlobal = (origin: Point, angle: number, point: Point): Point => {
 };
 
 /**
- * Ring distances per depth, derived from the layout settings: the first two
- * gaps come from `innerRingGap`; from ring 3 on each gap is the previous one
- * times `ringGrowth`; on a deep chart the last two are scaled by
- * `outerRingScale`. Card size only bounds that last factor from below, so
- * resizing cards otherwise never moves a ring.
+ * Ring distances per depth, straight from the per-ring steps (`ringSteps`,
+ * or each ring's default). Card size plays no part, so resizing cards never
+ * moves a ring.
  */
-function generationRadii(
-  maxDepth: number,
-  settings: Settings
-): { radii: number[]; outerFloor: number | null } {
-  // The outermost generations are usually few and far between, so on a deep
-  // chart (more than OUTER_MIN_RINGS rings) their two steps can be tightened on
-  // their own. Never below one card plus its stub, though: tightening further
-  // would push the length limit onto every card in the chart.
-  const tightOuter = maxDepth > OUTER_MIN_RINGS && settings.outerRingScale < 1;
-  const tightest = settings.cardLength + JUNCTION_DEPTH + RING_CLEARANCE;
-  let outerFloor: number | null = null;
+function generationRadii(maxDepth: number, settings: Settings): number[] {
   const radii = [0];
   for (let depth = 1; depth <= maxDepth; depth += 1) {
-    let gap =
-      depth <= 2 ? settings.innerRingGap : settings.ringGap * settings.ringGrowth ** (depth - 3);
-    if (tightOuter && depth > maxDepth - 2) {
-      const scaled = gap * settings.outerRingScale;
-      if (scaled < tightest && gap > tightest) outerFloor = tightest;
-      gap = Math.min(gap, Math.max(scaled, tightest));
-    }
-    radii.push((radii[depth - 1] ?? 0) + gap);
+    radii.push((radii[depth - 1] ?? 0) + ringStep(settings, depth));
   }
-  return { radii, outerFloor };
+  return radii;
 }
 
 /**
@@ -282,24 +260,65 @@ function coreChain(tree: DescendantTree, settings: Settings): TreeNode[] {
   return chain;
 }
 
-export function computeLayout(tree: DescendantTree, requested: Settings): Layout {
-  const chain = coreChain(tree, requested);
+/** The core chain, the node the rings grow from, and every node below it by ring (index = depth). */
+function ringStructure(tree: DescendantTree, settings: Settings) {
+  const chain = coreChain(tree, settings);
   const top = chain[chain.length - 1]!;
   const depthOf = (node: TreeNode) => node.generation - top.generation;
   const maxDepth = tree.maxGeneration - top.generation;
-
-  // Every card below the core, by ring.
   const rings: TreeNode[][] = Array.from({ length: maxDepth + 1 }, () => []);
   const collect = (node: TreeNode): void => {
     if (node !== top) rings[depthOf(node)]!.push(node);
     node.children.forEach(collect);
   };
   collect(top);
+  return { chain, top, depthOf, maxDepth, rings };
+}
 
-  const { radii: baseRadii, outerFloor } = generationRadii(maxDepth, requested);
-  // The straight sides make the outer ring `shapeStretch` times as wide as tall.
-  const outer = (baseRadii[maxDepth] ?? 0) + requested.cardLength / 2 + JUNCTION_DEPTH;
-  const half = Math.max(requested.shapeStretch - 1, 0) * outer;
+/** Half the straight sides: they make the outer ring `shapeStretch` times as wide as tall. */
+function stretchHalf(radii: number[], settings: Settings): number {
+  const outer = (radii[radii.length - 1] ?? 0) + settings.cardLength / 2 + JUNCTION_DEPTH;
+  return Math.max(settings.shapeStretch - 1, 0) * outer;
+}
+
+/**
+ * The tightest step for every ring of this tree («Плотно»): each ring as close
+ * to the previous one as a card plus its stub allows — any closer and cards
+ * would be shortened — unless its own cards need more room round the ring
+ * (its floor), and ring 1 far enough out to leave a legible core. With these
+ * steps no card is shortened and no ring has to be pushed. The straight sides
+ * of a stadium scale with the outer ring, and so change the floors, so repeat
+ * until the steps settle.
+ */
+export function compactSteps(tree: DescendantTree, settings: Settings): number[] {
+  const { maxDepth, rings } = ringStructure(tree, settings);
+  const tightest = settings.cardLength + JUNCTION_DEPTH + RING_CLEARANCE;
+  const firstRing = settings.cardLength / 2 + JUNCTION_DEPTH + RING_CLEARANCE + COMPACT_CORE_RADIUS;
+  let radii = generationRadii(maxDepth, settings);
+  let steps: number[] = [];
+  for (let round = 0; round < 12; round += 1) {
+    const track: Track = { half: stretchHalf(radii, settings), ref: 1 };
+    const next = [0];
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const blocks = rings[depth]!.map((node) => blockSize(node, settings));
+      const least = depth === 1 ? firstRing : (next[depth - 1] ?? 0) + tightest;
+      next.push(Math.max(least, ringFloor(track, blocks, settings)));
+    }
+    // Whole pixels, rounded up, so the layout finds every floor already met.
+    const nextSteps = next.slice(1).map((r, i) => Math.ceil(r - (next[i] ?? 0)));
+    const settled = nextSteps.every((step, i) => step === steps[i]);
+    steps = nextSteps;
+    radii = generationRadii(maxDepth, { ...settings, ringSteps: steps });
+    if (settled) break;
+  }
+  return steps;
+}
+
+export function computeLayout(tree: DescendantTree, requested: Settings): Layout {
+  const { chain, top, depthOf, maxDepth, rings } = ringStructure(tree, requested);
+
+  const baseRadii = generationRadii(maxDepth, requested);
+  const half = stretchHalf(baseRadii, requested);
 
   /**
    * Final ring distances for a card length. Each ring sits at its settings-given
@@ -463,7 +482,7 @@ export function computeLayout(tree: DescendantTree, requested: Settings): Layout
     extent: { halfWidth: half + reach, halfHeight: reach },
     cardLength,
     pushedRings,
-    outerFloor
+    ringCards: rings.slice(1).map((ring) => ring.length)
   };
 }
 

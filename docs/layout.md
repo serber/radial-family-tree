@@ -7,30 +7,33 @@ radius. It mutates nothing and touches neither DOM nor D3.
 
 ## Generation rings
 
-Base radii come from the layout settings alone — card size deliberately plays
-no part, so resizing cards never moves a ring:
+Base distances come from the per-ring steps alone — card size deliberately
+plays no part, so resizing cards never moves a ring:
 
 ```
-r(0) = 0                                        // root at the center
-r(g) = r(g-1) + gap(g)
+r(0) = 0                                        // the core
+r(g) = r(g-1) + step(g)
 
-gap(g) = innerRingGap                           for g ≤ 2
-gap(g) = ringGap · ringGrowth^(g-3)             for g ≥ 3
-
-// on charts with more than 4 rings, the last two steps:
-gap(g) = min(gap(g), max(gap(g) · outerRingScale, cardLength + JUNCTION_DEPTH + 8))
+step(g) = ringSteps[g-1]  if set, else 215 for g ≤ 2 and 180 beyond
 ```
 
-So the first two steps are both `innerRingGap` (the sparse core, tuned
-separately for readability), and from ring 3 on each gap is the previous one
-times `ringGrowth` (≥ 1, default 1 — the gaps **grow** outward, never decay).
-Crowding is handled by the ring floors below, so growth is only a look.
+Every ring has its own step (the «Кольца» group) because density differs from
+tree to tree: a deep patrilineal chart is crowded in its middle generations and
+sparse at both ends, a broad one is crowded at the edge.
 
-The outermost generations are usually sparse, so «Шаг двух внешних колец»
-(`outerRingScale`) tightens just the last two steps. It stops at one card plus
-its stub: any tighter and the card length limit below would shorten every card
-in the chart, not only the outer ones. When it stops there, `Layout.outerFloor`
-is set and the status bar says so.
+«Плотно» (`compactSteps`) fills in the tightest steps for the tree on screen:
+
+```
+r(1) = max(cardLength/2 + JUNCTION_DEPTH + 8 + 60, floor(1))   // a core of ≥ 60
+r(g) = max(r(g-1) + cardLength + JUNCTION_DEPTH + 8, floor(g))
+```
+
+— as close as a card plus its stub allows (closer, and the card length limit
+below would shorten every card), unless the ring's own cards need more room
+round it (its floor, below). A stadium's straight sides scale with the outer
+ring, which changes the floors, so it repeats until the steps settle. The
+steps are rounded up to whole pixels, so the layout finds every floor met:
+nothing is pushed and nothing shortened.
 
 These radii are what the sliders ask for. A ring moves further out only when
 its *own* cards don't fit it (see [Ring floors](#ring-floors)); it is never
@@ -76,8 +79,8 @@ explains itself.
 
 This is local on purpose. An earlier version scaled *all* radii by one factor
 whenever the tree didn't fit, which coupled the sliders the wrong way round:
-lowering «Шаг колец с 3-го» inflated rings 1–2, and lowering «Шаг колец 1–2»
-made the whole chart larger. `cardSpacing` also grew rings through a separate,
+lowering the step of the outer rings inflated rings 1–2, and lowering the
+step of rings 1–2 made the whole chart larger. `cardSpacing` also grew rings through a separate,
 capped per-ring pass that jumped and was not monotone.
 
 ## Angles, in two steps
@@ -264,7 +267,7 @@ interface Layout {
   extent: { halfWidth; halfHeight }; // for fit-to-view and export
   cardLength: number;    // card extent actually drawn (≤ the setting)
   pushedRings: number[]; // rings moved out past their slider step by a ring floor
-  outerFloor: number | null; // step the outer rings stopped at, if outerRingScale asked for less
+  ringCards: number[];   // family blocks per ring — for the «Кольца» slider labels
 }
 ```
 

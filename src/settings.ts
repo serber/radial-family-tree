@@ -11,17 +11,12 @@ export interface Settings {
    * into the central core, so the first ring holds the first real branching.
    */
   collapseChain: boolean;
-  /** Gap (px) for the first two rings: root→1 and 1→2. Tunes the sparse core. */
-  innerRingGap: number;
-  /** Base gap (px) between rings, from ring 3 on. */
-  ringGap: number;
-  /** Per-generation multiplier for the gap from ring 3 on — outer rings grow faster. */
-  ringGrowth: number;
   /**
-   * Factor (≤ 1) on the step of the two outermost rings, when there are more
-   * than four: the last generations are sparse and can sit closer.
+   * Step (px) of each ring from the previous one — ring 1 from the core — as
+   * set by hand. Rings past the end of the list use `defaultRingStep`. Kept per
+   * ring because density differs from tree to tree and ring to ring.
    */
-  outerRingScale: number;
+  ringSteps: number[];
   /** Arc length (px) kept free between neighbouring cards on a ring. */
   cardSpacing: number;
 
@@ -56,10 +51,7 @@ export interface Settings {
 export const defaultSettings: Settings = {
   shapeStretch: 1,
   collapseChain: true,
-  innerRingGap: 215,
-  ringGap: 180,
-  ringGrowth: 1,
-  outerRingScale: 1,
+  ringSteps: [],
   cardSpacing: 10,
 
   cardLength: 145,
@@ -79,6 +71,19 @@ export const defaultSettings: Settings = {
   ringColor: '#d9d2c2',
   canvasColor: '#f7f4ee'
 };
+
+/**
+ * Step of ring `ring` (1-based) when none is set: roomier for the first two,
+ * where few cards sit and the core needs space.
+ */
+export function defaultRingStep(ring: number): number {
+  return ring <= 2 ? 215 : 180;
+}
+
+/** The step ring `ring` (1-based) actually asks for: set by hand, or the default. */
+export function ringStep(settings: Pick<Settings, 'ringSteps'>, ring: number): number {
+  return settings.ringSteps[ring - 1] ?? defaultRingStep(ring);
+}
 
 export interface PrintSize {
   /** Also the i18n key of the visible label: `printSizes.<key>`. */

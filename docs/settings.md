@@ -14,15 +14,34 @@ The three tables below mirror the three panel groups, in panel order.
 | --- | --- | --- | --- | --- |
 | Вытянутость (100% — круг) | `shapeStretch` | 100–300 % (step 5) | 100 % | Width : height of the chart; stored as 1.0–3.0. At 100 % the rings are circles; above it they become stadiums around a straight central spine — descendants stand in columns along the sides and fan out round the ends. ≈ 141 % matches a landscape A-sheet (see [layout.md](layout.md#shape-circle-or-stadium)) |
 | Одиночную линию — в центр | `collapseChain` | on/off | on | While the top of the tree is a single line (root → only child → only child…, each with children of its own), those generations are listed in the core («→ Элем») and ring 1 starts at the first real branching (see [layout.md](layout.md#core-and-the-folded-line-of-descent)) |
-| Шаг колец 1–2 (от центра) | `innerRingGap` | 60–600 | 215 | Step used for both of the first two rings (center→1 and 1→2). Keeps the sparse core readable; moves only rings 1–2 (the rest shift with them, keeping their own steps) |
-| Шаг колец с 3-го | `ringGap` | 60–500 | 180 | Base step between rings from ring 3 on. Never touches rings 1–2 |
-| Рост шага с каждым кольцом | `ringGrowth` | 100–160 % | 100 % | Multiplier applied to the step once per generation from ring 3 on; stored as 1.0–1.6. Purely aesthetic: crowded rings already move out on their own (ring floors), so above 100 % it only adds empty room — and it compounds: at 112 % a 13-generation tree came out 1.6× larger (radius 3677 vs 2319) with its outer rings 5–9 % full. Hence the 100 % default |
-| Шаг двух внешних колец | `outerRingScale` | 30–100 % | 100 % | Factor on the step of the two outermost rings, only when the chart has more than 4 rings; stored as 0.3–1.0. The last generations are usually sparse, so they can sit closer. A percentage, not px, so it follows «Шаг колец с 3-го» and «Рост шага». Never tightens below one card plus its stub (`cardLength + 16 + 8`, 169 px at the defaults) — further would shorten every card in the chart — and the status bar says when it stopped there. So at the default 180 px step it gains little; it pays off when the general step is raised (at 300 px, 50 % takes the last two steps to 169 px) |
 | Зазор между карточками | `cardSpacing` | 0–160 | 10 | Minimum distance between neighbouring cards on a ring — guaranteed. Cards slide along their ring to get it; a ring whose own cards can't get it moves out just far enough, and the status bar names it (see [layout.md](layout.md#ring-floors)) |
 
-A step slider moves exactly its own rings, in the direction it is dragged —
-unless a ring's own cards don't fit at that radius, in which case that ring
-stops at its floor and the status bar says «кольца N отодвинуты…».
+## Rings («Кольца»)
+
+One step slider per ring of the chart on screen — the group is rebuilt when
+the number of rings changes (another file or root, «Одиночную линию — в
+центр»). Density differs from tree to tree and ring to ring, so each label
+also says how many cards sit on that ring («Кольцо 7 · 209 карточек»).
+
+| Control | Key | Range | Default | Effect |
+| --- | --- | --- | --- | --- |
+| Кольцо N | `ringSteps[N−1]` | 60–600 px (more if «Плотно» went higher) | 215 for rings 1–2, 180 beyond (`defaultRingStep`) | Distance of ring N from ring N−1 (ring 1: from the core). Moves ring N and, keeping their own steps, every ring outside it |
+| Плотно | — | button | — | Sets every step to the tightest this tree allows (`compactSteps`): one card plus its stub (`cardLength + 16 + 8`, 169 px at the defaults) unless the ring's own cards need more room round it, and ring 1 far enough out for a legible core. No card is shortened and no ring pushed |
+| Сбросить | — | button | — | Back to the defaults |
+
+`ringSteps` is empty by default and is cleared when another file is loaded:
+steps tuned for one tree mean nothing for the next. Rings past its end use
+their defaults.
+
+A step moves exactly its own ring (and those outside it), in the direction it
+is dragged — unless the ring's own cards don't fit at that distance, in which
+case it stops at its floor and the status bar says «кольца N отодвинуты…».
+Below one card plus its stub the cards would reach the next ring, so every
+card is shortened, and the status bar says that too.
+
+These sliders replace the earlier «Шаг колец 1–2», «Шаг колец с 3-го», «Рост
+шага с каждым кольцом» and «Шаг двух внешних колец», which could only set
+rings in fixed groups.
 
 ## Card («Карточка»)
 
@@ -93,7 +112,7 @@ visible label (`printSizes.<key>`). See [export.md](export.md).
    (`src/settings.ts`).
 2. Add a descriptor to the appropriate `controlGroups` group
    (`src/ui/controls.ts`): `range` (with optional `toValue`/`toDisplay`/
-   `format` — see `ringGrowth`, which stores 1.12 but shows «112 %»), `color`
+   `format` — see `shapeStretch`, which stores 1.4 but shows «140 %»), `color`
    or `toggle`.
 3. Add the label under `controls.<key>` in both `messages/en.json` and
    `messages/ru.json` — the descriptor carries a `labelKey`, never literal text.

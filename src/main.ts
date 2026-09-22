@@ -6,7 +6,7 @@ import { sampleGedcom } from './gedcom/sample.ts';
 import type { GedcomData } from './gedcom/types.ts';
 import { applyStaticTranslations, getLocale, onLocaleChange, setLocale, t, type Locale } from './i18n/index.ts';
 import { buildTree, listRootCandidates, type DescendantTree, type TreeNode } from './tree/build.ts';
-import { computeLayout, type Layout } from './layout/radial.ts';
+import { compactSteps, computeLayout, type Layout } from './layout/radial.ts';
 import { TreeRenderer } from './render/renderer.ts';
 import { downloadBlob, renderJpeg } from './export/exportJpeg.ts';
 import { PRINT_SIZES, defaultSettings, type PrintSize, type Settings } from './settings.ts';
@@ -63,15 +63,34 @@ function showStats(): void {
   if (layout && layout.cardLength < settings.cardLength) {
     notes.push(t('status.cardShortened', { length: Math.round(layout.cardLength) }));
   }
-  if (layout?.outerFloor) {
-    notes.push(t('status.outerFloor', { step: Math.round(layout.outerFloor) }));
-  }
   if (layout && layout.pushedRings.length) {
     notes.push(
       t('status.ringsPushed', { count: layout.pushedRings.length, rings: layout.pushedRings.join(', ') })
     );
   }
   setStatus([stats, ...notes].join(' · '));
+}
+
+/** Rings (and their card counts) the settings panel currently has sliders for. */
+let panelRings = '';
+
+/** (Re)builds the settings panel — including one step slider per ring of the chart. */
+function buildPanel(): void {
+  panelRings = JSON.stringify(layout?.ringCards ?? []);
+  buildSettingsPanel(el.settingsPanel, settings, onSettingsChange, {
+    cards: layout?.ringCards ?? [],
+    compact: () => {
+      if (!tree) return;
+      settings.ringSteps = compactSteps(tree, settings);
+      onSettingsChange();
+      buildPanel(); // the sliders show the new steps
+    },
+    reset: () => {
+      settings.ringSteps = [];
+      onSettingsChange();
+      buildPanel();
+    }
+  });
 }
 
 function rerender(): void {
@@ -81,6 +100,8 @@ function rerender(): void {
   if (!tree) return;
   layout = computeLayout(tree, settings);
   renderer.update(layout, settings);
+  // Another tree, or folding the top line in or out, changes the rings.
+  if (JSON.stringify(layout.ringCards) !== panelRings) buildPanel();
 }
 
 /** A settings control changed: re-layout and refresh the status line. */
@@ -125,6 +146,8 @@ function loadGedcom(text: string): void {
     setStatus(t('status.error', { message: errorMessage(error) }), true);
     return;
   }
+  // Ring steps tuned for one tree mean nothing for the next.
+  settings.ringSteps = [];
 
   populateRootSelect();
   const first = el.rootSelect.options[0];
@@ -216,7 +239,7 @@ function applyLocale(): void {
   el.langSwitch.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
     button.classList.toggle('active', button.dataset['lang'] === getLocale());
   });
-  buildSettingsPanel(el.settingsPanel, settings, onSettingsChange);
+  buildPanel();
   populatePrintSizes();
   populateRootSelect();
   rerender(); // card tooltips contain translated life-year labels
