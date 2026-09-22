@@ -45,18 +45,33 @@ export const controlGroups: ControlGroup[] = [
   {
     titleKey: 'groups.layout',
     open: true,
+    // The overall shape first, then from the center outwards: rings 1–2, the
+    // rings beyond, how those grow, then the spacing along each ring.
     controls: [
+      {
+        kind: 'range',
+        key: 'shapeStretch',
+        labelKey: 'controls.shapeStretch',
+        min: 100,
+        max: 300,
+        step: 5,
+        toValue: (v) => v / 100,
+        toDisplay: (v) => Math.round(v * 100),
+        format: (v) => `${v}%`
+      },
+      { kind: 'toggle', key: 'collapseChain', labelKey: 'controls.collapseChain' },
+      { kind: 'range', key: 'innerRingGap', labelKey: 'controls.innerRingGap', min: 60, max: 600 },
       { kind: 'range', key: 'ringGap', labelKey: 'controls.ringGap', min: 60, max: 500 },
       {
         kind: 'range',
-        key: 'ringGrowth', labelKey: 'controls.ringGrowth',
+        key: 'ringGrowth',
+        labelKey: 'controls.ringGrowth',
         min: 100,
         max: 160,
         toValue: (v) => v / 100,
         toDisplay: (v) => Math.round(v * 100),
         format: (v) => `${v}%`
       },
-      { kind: 'range', key: 'innerRingGap', labelKey: 'controls.innerRingGap', min: 60, max: 600 },
       { kind: 'range', key: 'cardSpacing', labelKey: 'controls.cardSpacing', min: 0, max: 160 }
     ]
   },

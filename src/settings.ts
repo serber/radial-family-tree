@@ -1,6 +1,16 @@
 /** Visual & layout settings, adjustable from the side panel. */
 export interface Settings {
   // ---- Layout -------------------------------------------------------------
+  /**
+   * Width : height of the chart. 1 draws circles; above 1 the rings become
+   * stadiums (half circles joined by straight sides) around a central spine.
+   */
+  shapeStretch: number;
+  /**
+   * Fold a single line of descent at the top (root → only child → only child…)
+   * into the central core, so the first ring holds the first real branching.
+   */
+  collapseChain: boolean;
   /** Gap (px) for the first two rings: root→1 and 1→2. Tunes the sparse core. */
   innerRingGap: number;
   /** Base gap (px) between rings, from ring 3 on. */
@@ -39,9 +49,11 @@ export interface Settings {
 }
 
 export const defaultSettings: Settings = {
+  shapeStretch: 1,
+  collapseChain: true,
   innerRingGap: 215,
   ringGap: 180,
-  ringGrowth: 1.12,
+  ringGrowth: 1,
   cardSpacing: 10,
 
   cardLength: 145,

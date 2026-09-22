@@ -1,12 +1,23 @@
-import { arc, select, zoom, zoomIdentity } from 'd3';
+import { curveCatmullRom, line, select, zoom, zoomIdentity } from 'd3';
 import type { Selection, ZoomBehavior } from 'd3';
 import { SPOUSE_LINE_INSET } from '../layout/radial.ts';
-import type { CardSlot, Layout, PlacedLink, PlacedNode, Point, StubSlot } from '../layout/radial.ts';
+import type { CardSlot, Core, Layout, PlacedLink, PlacedNode, Point, StubSlot } from '../layout/radial.ts';
+import { trackPath } from '../layout/track.ts';
 import type { PersonRef } from '../tree/build.ts';
-import { defaultSettings, type Settings } from '../settings.ts';
+import type { Settings } from '../settings.ts';
 import { FONT_STACK, lifeSpanLabel, palette, sexColors } from './palette.ts';
 
 type GSelection = Selection<SVGGElement, unknown, null, undefined>;
+
+/** One line of text in the core, on its own colored band. */
+interface CoreRow {
+  key: string;
+  people: PersonRef[];
+  text: string;
+}
+
+/** There is one core per chart, so its clip path can have a fixed id. */
+const CORE_CLIP_ID = 'core-clip';
 
 interface CardDatum {
   card: CardSlot;
@@ -22,8 +33,46 @@ function cardClipId(d: CardDatum): string {
 
 const MAX_NAME_CHARS = 32;
 
+/** Character cap for the root disc labels, whose font size is fitted to the name instead. */
 function truncateName(name: string): string {
   return name.length > MAX_NAME_CHARS ? `${name.slice(0, MAX_NAME_CHARS - 3)}…` : name;
+}
+
+/** Free space kept at each end of a card's name; covers the entry strip. */
+const NAME_PADDING = 6;
+
+let measureContext: CanvasRenderingContext2D | null = null;
+const fittedNames = new Map<string, string>();
+
+/**
+ * The name as it fits `maxWidth` at this font — whole, or cut with an ellipsis.
+ * Measured on a canvas rather than on the SVG text: no layout reflow per card,
+ * and the canvas lays the same font out to the same width.
+ */
+function fitName(name: string, maxWidth: number, fontSize: number, fontWeight: number): string {
+  const key = `${fontWeight}|${fontSize}|${Math.round(maxWidth)}|${name}`;
+  const cached = fittedNames.get(key);
+  if (cached !== undefined) return cached;
+
+  measureContext ??= document.createElement('canvas').getContext('2d');
+  let fitted = name;
+  if (measureContext) {
+    measureContext.font = `${fontWeight} ${fontSize}px ${FONT_STACK}`;
+    const width = (text: string) => measureContext!.measureText(text).width;
+    if (width(name) > maxWidth) {
+      // Longest prefix that still fits together with the ellipsis.
+      let lo = 0;
+      let hi = name.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (width(`${name.slice(0, mid).trimEnd()}…`) <= maxWidth) lo = mid;
+        else hi = mid - 1;
+      }
+      fitted = lo > 0 ? `${name.slice(0, lo).trimEnd()}…` : '';
+    }
+  }
+  fittedNames.set(key, fitted);
+  return fitted;
 }
 
 function personTitle(person: PersonRef): string {
@@ -37,13 +86,14 @@ function needsFlip(deg: number): boolean {
   return normalized > 90 && normalized < 270;
 }
 
-function linkPath(link: PlacedLink, settings: Settings): string {
-  const { start, end, startDir, endDir } = link;
-  const dist = Math.hypot(end.x - start.x, end.y - start.y) || 1;
-  const tension = Math.min(dist * 0.35, settings.ringGap * 0.6);
-  const c1: Point = { x: start.x + startDir.x * tension, y: start.y + startDir.y * tension };
-  const c2: Point = { x: end.x + endDir.x * tension, y: end.y + endDir.y * tension };
-  return `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
+const smoothLine = line<Point>()
+  .x((p) => p.x)
+  .y((p) => p.y)
+  .curve(curveCatmullRom.alpha(0.5));
+
+/** The link's sampled course (see `linkPoints` in the layout), smoothed through every point. */
+function linkPath(link: PlacedLink): string {
+  return smoothLine(link.points) ?? '';
 }
 
 /**
@@ -60,6 +110,8 @@ export class TreeRenderer {
   private readonly zoomBehavior: ZoomBehavior<SVGSVGElement, unknown>;
   private viewWidth = 900;
   private viewHeight = 900;
+  /** Last rendered scene, redrawn when a web font finishes loading. */
+  private last: { layout: Layout; settings: Settings } | null = null;
 
   constructor(container: HTMLElement) {
     this.svg = select(container)
@@ -88,6 +140,13 @@ export class TreeRenderer {
     });
     observer.observe(container);
     this.resize(container.clientWidth, container.clientHeight);
+
+    // Names are fitted by measuring the font; until Spectral arrives that is
+    // the fallback serif, so measure again once it (or its bold face) loads.
+    document.fonts?.addEventListener('loadingdone', () => {
+      fittedNames.clear();
+      if (this.last) this.update(this.last.layout, this.last.settings);
+    });
   }
 
   get element(): SVGSVGElement {
@@ -105,6 +164,7 @@ export class TreeRenderer {
   }
 
   update(layout: Layout, settings: Settings): void {
+    this.last = { layout, settings };
     this.svg.style('background-color', settings.canvasColor ?? null);
     this.renderRings(layout, settings);
     this.renderLinks(layout, settings);
@@ -112,17 +172,12 @@ export class TreeRenderer {
     this.renderRoot(layout, settings);
   }
 
-  clear(): void {
-    this.update({ nodes: [], links: [], rings: [], rootRadius: 0, maxRadius: 0 }, defaultSettings);
-  }
-
   /** Scales and centers the drawing so the whole tree is visible. */
-  fitToContent(maxRadius: number, animate = true): void {
+  fitToContent(extent: Layout['extent'], animate = true): void {
     const padding = 24;
-    const size = Math.max(maxRadius * 2, 1);
     const k = Math.min(
-      (this.viewWidth - padding * 2) / size,
-      (this.viewHeight - padding * 2) / size,
+      (this.viewWidth - padding * 2) / Math.max(extent.halfWidth * 2, 1),
+      (this.viewHeight - padding * 2) / Math.max(extent.halfHeight * 2, 1),
       1.5
     );
     const transform = zoomIdentity.scale(Math.max(k, 0.03));
@@ -132,10 +187,10 @@ export class TreeRenderer {
 
   private renderRings(layout: Layout, settings: Settings): void {
     this.ringLayer
-      .selectAll<SVGCircleElement, number>('circle')
+      .selectAll<SVGPathElement, number>('path')
       .data(settings.showRings ? layout.rings : [])
-      .join('circle')
-      .attr('r', (d) => d)
+      .join('path')
+      .attr('d', (d) => trackPath(layout.track, d))
       .attr('fill', 'none')
       .attr('stroke', settings.ringColor)
       .attr('stroke-width', 1)
@@ -151,7 +206,7 @@ export class TreeRenderer {
       .attr('stroke', settings.lineColor)
       .attr('stroke-width', settings.lineWidth)
       .attr('stroke-linecap', 'round')
-      .attr('d', (d) => linkPath(d, settings));
+      .attr('d', (d) => linkPath(d));
   }
 
   private renderFamilies(layout: Layout, settings: Settings): void {
@@ -214,7 +269,9 @@ export class TreeRenderer {
         g.append('clipPath').attr('class', 'card-clip').append('rect');
         g.append('rect').attr('class', 'card-bg');
         g.append('rect').attr('class', 'entry-strip');
-        g.append('text').attr('class', 'card-name');
+        // The name sits in its own clipped group: the text carries a rotation,
+        // and a clip on it would rotate along.
+        g.append('g').attr('class', 'card-label').append('text').attr('class', 'card-name');
         g.append('title');
         return g;
       });
@@ -250,6 +307,10 @@ export class TreeRenderer {
       .attr('clip-path', (d) => `url(#${cardClipId(d)})`)
       .attr('fill', (d) => sexColors(d.card.person.sex, settings).accent);
 
+    // Backstop for what width fitting can't catch — a font taller than the card.
+    cardSel.select<SVGGElement>('g.card-label').attr('clip-path', (d) => `url(#${cardClipId(d)})`);
+
+    const fontWeight = settings.boldFont ? 700 : 400;
     cardSel
       .select<SVGTextElement>('text.card-name')
       .attr('transform', (d) => {
@@ -261,104 +322,116 @@ export class TreeRenderer {
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('font-size', settings.fontSize)
-      .attr('font-weight', settings.boldFont ? 700 : 400)
+      .attr('font-weight', fontWeight)
       .attr('fill', palette.text)
-      .text((d) => truncateName(d.card.person.name));
+      .text((d) =>
+        fitName(d.card.person.name, d.card.width - 2 * NAME_PADDING, settings.fontSize, fontWeight)
+      );
 
     cardSel.select('title').text((d) => personTitle(d.card.person));
   }
 
+  /**
+   * The core: a disc (circle) or pill (stadium) cut into one horizontal band per
+   * line of text — each root spouse, then each generation folded into the core
+   * («→ Элем»). For the usual couple that is the familiar top and bottom halves.
+   */
   private renderRoot(layout: Layout, settings: Settings): void {
-    const root = layout.nodes.find((n) => n.isRoot);
-    const spouses = root?.node.spouses ?? [];
+    const { core, track } = layout;
+    const rows: CoreRow[] = [
+      ...core.people.map((person) => ({ key: person.id, people: [person], text: person.name })),
+      ...core.chain.map((people) => ({
+        key: people.map((p) => p.id).join('+'),
+        people,
+        text: `→ ${people.map((p) => p.name).join(' + ')}`
+      }))
+    ];
 
     const rootSel = this.rootLayer
-      .selectAll<SVGGElement, PlacedNode>('g.root-node')
-      .data(root && spouses.length ? [root] : [])
+      .selectAll<SVGGElement, Core>('g.root-node')
+      .data(rows.length ? [core] : [])
       .join((enter) => {
         const g = enter.append('g').attr('class', 'root-node');
-        g.append('circle').attr('class', 'halo');
-        g.append('g').attr('class', 'slices');
-        g.append('g').attr('class', 'dividers');
-        g.append('circle').attr('class', 'outline');
+        g.append('clipPath').attr('id', CORE_CLIP_ID).append('path');
+        g.append('path').attr('class', 'halo');
+        g.append('g').attr('class', 'bands').attr('clip-path', `url(#${CORE_CLIP_ID})`);
+        g.append('path').attr('class', 'outline');
         g.append('g').attr('class', 'labels');
         g.append('title');
         return g;
       });
     if (rootSel.empty()) return;
 
-    const r = layout.rootRadius;
-    const primary = spouses[0]!;
-    // The disc is cut into one wedge per person, so a root ancestor who married
-    // more than once shows every spouse instead of just the first.
-    const n = spouses.length;
-    const sliceAngle = (2 * Math.PI) / n;
-    // d3.arc angles are clockwise from 12 o'clock, so at n = 2 the boundaries land
-    // left and right and the two wedges are the familiar top and bottom halves.
-    const boundary = (i: number): number => -Math.PI / 2 + i * sliceAngle;
+    const r = core.radius;
+    const shape = trackPath(track, r);
+    const m = rows.length;
+    const bandHeight = (2 * r) / m;
+    const bandTop = (i: number) => -r + i * bandHeight;
+    const bandMiddle = (i: number) => bandTop(i) + bandHeight / 2;
+    /** Half the core's width at height y: the straight part plus the round end's chord. */
+    const halfWidthAt = (y: number) => track.half + Math.sqrt(Math.max(r * r - y * y, 0));
 
+    rootSel.select('clipPath path').attr('d', shape);
     rootSel
-      .select<SVGCircleElement>('circle.halo')
-      .attr('r', r + 5)
+      .select<SVGPathElement>('path.halo')
+      .attr('d', trackPath(track, r + 5))
       .attr('fill', '#ffffff')
       .attr('stroke', palette.rootHalo)
       .attr('stroke-width', 1);
 
-    const wedge = arc<{ start: number; end: number }>()
-      .innerRadius(0)
-      .outerRadius(r)
-      .startAngle((d) => d.start)
-      .endAngle((d) => d.end);
+    rootSel
+      .select('g.bands')
+      .selectAll<SVGRectElement, CoreRow>('rect')
+      .data(rows, (d) => d.key)
+      .join('rect')
+      .attr('x', -(track.half + r))
+      .attr('y', (_d, i) => bandTop(i))
+      .attr('width', 2 * (track.half + r))
+      .attr('height', bandHeight)
+      .attr('fill', (d) => sexColors(d.people[0]?.sex ?? 'U', settings).fill);
 
     rootSel
-      .select('g.slices')
-      .selectAll<SVGPathElement, PersonRef>('path')
-      .data(spouses, (d) => d.id)
-      .join('path')
-      .attr('d', (_d, i) => wedge({ start: boundary(i), end: boundary(i + 1) }))
-      .attr('fill', (d) => sexColors(d.sex, settings).fill);
-
-    rootSel
-      .select('g.dividers')
+      .select('g.bands')
       .selectAll<SVGLineElement, number>('line')
-      .data(n > 1 ? spouses.map((_d, i) => boundary(i)) : [])
+      .data(rows.slice(1).map((_d, i) => bandTop(i + 1)))
       .join('line')
-      .attr('x1', 0)
-      .attr('y1', 0)
-      .attr('x2', (a) => Math.sin(a) * r)
-      .attr('y2', (a) => -Math.cos(a) * r)
+      .attr('x1', (y) => -halfWidthAt(y))
+      .attr('x2', (y) => halfWidthAt(y))
+      .attr('y1', (y) => y)
+      .attr('y2', (y) => y)
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 1.5);
 
     rootSel
-      .select<SVGCircleElement>('circle.outline')
-      .attr('r', r)
+      .select<SVGPathElement>('path.outline')
+      .attr('d', shape)
       .attr('fill', 'none')
-      .attr('stroke', sexColors(primary.sex, settings).border)
+      .attr('stroke', sexColors(rows[0]!.people[0]?.sex ?? 'U', settings).border)
       .attr('stroke-width', 1.2);
 
-    // Fit the longest name inside the disc so it never reaches the edge: bound the
-    // size by the available chord width (widest name) and by the disc height, which
-    // every extra stacked label divides further.
-    const longest = Math.max(...spouses.map((p) => p.name.length), 1);
-    const byWidth = (r * 1.3) / (longest * 0.58);
-    const byHeight = n > 1 ? (r * 0.8) / n : r * 0.55;
+    // One font size for every row, as large as the band height allows and small
+    // enough that each row fits the core's width at its own height.
+    const byHeight = m > 1 ? bandHeight * 0.4 : r * 0.55;
+    const byWidth = Math.min(
+      ...rows.map((row, i) => (halfWidthAt(bandMiddle(i)) * 2 * 0.8) / (Math.max(row.text.length, 1) * 0.58))
+    );
     const fontSize = Math.max(Math.min(byWidth, byHeight), 5);
-    const step = (r * 1.68) / n;
 
     rootSel
       .select('g.labels')
-      .selectAll<SVGTextElement, PersonRef>('text')
-      .data(spouses, (d) => d.id)
+      .selectAll<SVGTextElement, CoreRow>('text')
+      .data(rows, (d) => d.key)
       .join('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
-      .attr('y', (_d, i) => (n > 1 ? (i - (n - 1) / 2) * step : 0))
+      .attr('y', (_d, i) => (m > 1 ? bandMiddle(i) : 0))
       .attr('font-size', fontSize)
       .attr('font-weight', 600)
       .attr('fill', palette.text)
-      .text((d) => truncateName(d.name));
+      .text((d) => truncateName(d.text));
 
-    rootSel.select('title').text(spouses.map(personTitle).join('\n'));
+    rootSel
+      .select('title')
+      .text([...core.people.map(personTitle), ...core.chain.map((people) => people.map(personTitle).join(' + '))].join('\n'));
   }
 }

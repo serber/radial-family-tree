@@ -6,7 +6,8 @@
   },
   "legend": {
     "male": "Men",
-    "female": "Women"
+    "female": "Women",
+    "unknown": "Sex unknown"
   },
   "actions": {
     "load": "Load GEDCOM",
@@ -24,10 +25,12 @@
     "style": "Style"
   },
   "controls": {
-    "ringGap": "Ring spacing",
-    "ringGrowth": "Outer ring growth",
-    "innerRingGap": "Spacing of rings 1 and 2",
-    "cardSpacing": "Card spacing",
+    "shapeStretch": "Stretch (100% = circle)",
+    "collapseChain": "Single line of descent in the core",
+    "ringGap": "Ring step, from ring 3",
+    "ringGrowth": "Step growth per ring",
+    "innerRingGap": "Ring step, rings 1–2",
+    "cardSpacing": "Gap between cards",
     "cardLength": "Card length",
     "cardThickness": "Card thickness",
     "fontSize": "Font size",
@@ -55,6 +58,8 @@
   },
   "status": {
     "stats": "Shown: {people, plural, one {# person} other {# people}} · {families, plural, one {# family} other {# families}} · {generations, plural, one {# generation} other {# generations}}",
+    "cardShortened": "cards shortened to {length} px so they don't reach the next ring",
+    "ringsPushed": "{count, plural, one {ring {rings} moved out} other {rings {rings} moved out}} to fit the cards with the requested gap",
     "rootOption": "{label} ({count, plural, one {# descendant} other {# descendants}})",
     "exporting": "Exporting {size}…",
     "saved": "Saved: {size}",

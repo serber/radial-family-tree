@@ -6,7 +6,8 @@
   },
   "legend": {
     "male": "Мужчины",
-    "female": "Женщины"
+    "female": "Женщины",
+    "unknown": "Пол не указан"
   },
   "actions": {
     "load": "Загрузить GEDCOM",
@@ -24,10 +25,12 @@
     "style": "Стиль"
   },
   "controls": {
-    "ringGap": "Расстояние между кольцами",
-    "ringGrowth": "Рост внешних колец",
-    "innerRingGap": "Расстояние между кольцами 1 и 2",
-    "cardSpacing": "Расстояние между карточками",
+    "shapeStretch": "Вытянутость (100% — круг)",
+    "collapseChain": "Одиночную линию — в центр",
+    "ringGap": "Шаг колец с 3-го",
+    "ringGrowth": "Рост шага с каждым кольцом",
+    "innerRingGap": "Шаг колец 1–2 (от центра)",
+    "cardSpacing": "Зазор между карточками",
     "cardLength": "Длина карточки",
     "cardThickness": "Толщина карточки",
     "fontSize": "Размер шрифта",
@@ -55,6 +58,8 @@
   },
   "status": {
     "stats": "Показано: {people, plural, one {# человек} few {# человека} many {# человек} other {# человека}} · {families, plural, one {# семья} few {# семьи} many {# семей} other {# семьи}} · {generations, plural, one {# поколение} few {# поколения} many {# поколений} other {# поколения}}",
+    "cardShortened": "карточки укорочены до {length} px, чтобы не заходить на соседнее кольцо",
+    "ringsPushed": "{count, plural, one {кольцо {rings} отодвинуто} other {кольца {rings} отодвинуты}}, чтобы карточки поместились с заданным зазором",
     "rootOption": "{label} (потомков: {count})",
     "exporting": "Экспорт {size}…",
     "saved": "Сохранено: {size}",

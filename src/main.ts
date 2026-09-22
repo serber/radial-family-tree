@@ -1,10 +1,11 @@
 import './style.css';
 import { AppError } from './errors.ts';
+import { decodeGedcom } from './gedcom/decode.ts';
 import { parseGedcom } from './gedcom/parser.ts';
 import { sampleGedcom } from './gedcom/sample.ts';
 import type { GedcomData } from './gedcom/types.ts';
 import { applyStaticTranslations, getLocale, onLocaleChange, setLocale, t, type Locale } from './i18n/index.ts';
-import { buildTree, listRootCandidates, type DescendantTree } from './tree/build.ts';
+import { buildTree, listRootCandidates, type DescendantTree, type TreeNode } from './tree/build.ts';
 import { computeLayout, type Layout } from './layout/radial.ts';
 import { TreeRenderer } from './render/renderer.ts';
 import { downloadBlob, renderJpeg } from './export/exportJpeg.ts';
@@ -26,8 +27,14 @@ const el = {
   printSizeSelect: document.getElementById('printSizeSelect') as HTMLSelectElement,
   exportBtn: document.getElementById('exportBtn') as HTMLButtonElement,
   fitBtn: document.getElementById('fitBtn') as HTMLButtonElement,
-  langSwitch: document.getElementById('langSwitch') as HTMLDivElement
+  langSwitch: document.getElementById('langSwitch') as HTMLDivElement,
+  legendUnknown: document.getElementById('legendUnknown') as HTMLSpanElement
 };
+
+/** True when some drawn person has no known sex (their cards use the neutral color). */
+function hasUnknownSex(node: TreeNode): boolean {
+  return node.spouses.some((p) => p.sex === 'U') || node.children.some(hasUnknownSex);
+}
 
 const renderer = new TreeRenderer(el.chart);
 
@@ -43,13 +50,25 @@ function setStatus(message: string, isError = false): void {
 
 function showStats(): void {
   if (!tree) return;
-  setStatus(
-    t('status.stats', {
-      people: tree.peopleCount,
-      families: tree.familyCount,
-      generations: tree.maxGeneration + 1
-    })
-  );
+  const stats = t('status.stats', {
+    people: tree.peopleCount,
+    families: tree.familyCount,
+    generations: tree.maxGeneration + 1
+  });
+  // The layout overrides a setting when honouring it would make cards collide:
+  // it shortens cards that would reach the next ring, and moves out a ring whose
+  // cards don't fit it with the requested gap. Say so, or the slider in
+  // question would seem to stop working.
+  const notes: string[] = [];
+  if (layout && layout.cardLength < settings.cardLength) {
+    notes.push(t('status.cardShortened', { length: Math.round(layout.cardLength) }));
+  }
+  if (layout && layout.pushedRings.length) {
+    notes.push(
+      t('status.ringsPushed', { count: layout.pushedRings.length, rings: layout.pushedRings.join(', ') })
+    );
+  }
+  setStatus([stats, ...notes].join(' · '));
 }
 
 function rerender(): void {
@@ -61,12 +80,19 @@ function rerender(): void {
   renderer.update(layout, settings);
 }
 
+/** A settings control changed: re-layout and refresh the status line. */
+function onSettingsChange(): void {
+  rerender();
+  showStats();
+}
+
 function selectRoot(familyId: string, fit: boolean): void {
   if (!data) return;
   try {
     tree = buildTree(data, familyId);
+    el.legendUnknown.hidden = !hasUnknownSex(tree.root);
     rerender();
-    if (fit && layout) renderer.fitToContent(layout.maxRadius, false);
+    if (fit && layout) renderer.fitToContent(layout.extent, false);
     showStats();
   } catch (error) {
     setStatus(t('status.error', { message: errorMessage(error) }), true);
@@ -107,9 +133,10 @@ function loadGedcom(text: string): void {
 
 function readFile(file: File): void {
   const reader = new FileReader();
-  reader.onload = () => loadGedcom(String(reader.result));
+  // Raw bytes, not readAsText: the encoding varies by program (see decodeGedcom).
+  reader.onload = () => loadGedcom(decodeGedcom(new Uint8Array(reader.result as ArrayBuffer)));
   reader.onerror = () => setStatus(t('status.readFileError'), true);
-  reader.readAsText(file, 'utf-8');
+  reader.readAsArrayBuffer(file);
 }
 
 function setupDataInputs(): void {
@@ -166,7 +193,7 @@ function setupExport(): void {
     el.exportBtn.disabled = true;
     setStatus(t('status.exporting', { size: sizeLabel(size) }));
     try {
-      const blob = await renderJpeg(renderer.element, layout.maxRadius, size, settings.canvasColor);
+      const blob = await renderJpeg(renderer.element, layout.extent, size, settings.canvasColor);
       downloadBlob(blob, `family-tree-${size.key}.jpg`);
       setStatus(t('status.saved', { size: sizeLabel(size) }));
     } catch (error) {
@@ -186,7 +213,7 @@ function applyLocale(): void {
   el.langSwitch.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
     button.classList.toggle('active', button.dataset['lang'] === getLocale());
   });
-  buildSettingsPanel(el.settingsPanel, settings, rerender);
+  buildSettingsPanel(el.settingsPanel, settings, onSettingsChange);
   populatePrintSizes();
   populateRootSelect();
   rerender(); // card tooltips contain translated life-year labels
@@ -205,7 +232,7 @@ setupDataInputs();
 setupExport();
 setupLangSwitch();
 el.fitBtn.addEventListener('click', () => {
-  if (layout) renderer.fitToContent(layout.maxRadius);
+  if (layout) renderer.fitToContent(layout.extent);
 });
 
 applyLocale();

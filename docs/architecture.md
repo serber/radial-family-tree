@@ -61,12 +61,15 @@ The `TreeRenderer` class owns the SVG scene:
   moving a slider updates attributes of existing elements without recreating
   the DOM;
 - zoom/pan live on a persistent `.zoom-layer` group and survive any update;
-  `fitToContent(maxRadius)` fits the tree into the window;
+  `fitToContent(layout.extent)` fits the tree into the window;
 - **all styling is set via SVG presentation attributes, not CSS** — a
   deliberate decision: the serialized SVG is self-contained and the export
   does not depend on external styles;
 - card labels are counter-rotated by 180° when the node angle falls into
-  (90°, 270°), so names on the left half of the circle are never upside down.
+  (90°, 270°), so names on the left half of the chart are never upside down;
+- rings are drawn as `trackPath` outlines (circles or stadiums), links from
+  the layout’s sampled `points`, and the core as a disc or pill cut into one
+  band per line of text (root spouses, then the folded line «→ Элем»).
 
 ### `src/export` — JPEG export
 A native chain: “clone SVG → XMLSerializer → `<img>` → canvas → JPEG”, with

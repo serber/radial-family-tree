@@ -8,7 +8,7 @@ import type { PrintSize } from '../settings.ts';
  */
 export async function renderJpeg(
   svg: SVGSVGElement,
-  contentRadius: number,
+  extent: { halfWidth: number; halfHeight: number },
   size: PrintSize,
   background: string
 ): Promise<Blob> {
@@ -17,10 +17,12 @@ export async function renderJpeg(
   // Export ignores the on-screen zoom: show the whole tree, centered.
   clone.querySelector('.zoom-layer')?.removeAttribute('transform');
 
-  const side = Math.max(contentRadius * 2, 1) * 1.04;
+  // The drawing plus a 2 % margin, widened in one direction to the sheet's aspect.
+  const width = Math.max(extent.halfWidth * 2, 1) * 1.04;
+  const height = Math.max(extent.halfHeight * 2, 1) * 1.04;
   const aspect = size.width / size.height;
-  const vbWidth = aspect >= 1 ? side * aspect : side;
-  const vbHeight = aspect >= 1 ? side : side / aspect;
+  const vbWidth = Math.max(width, height * aspect);
+  const vbHeight = vbWidth / aspect;
   clone.setAttribute('viewBox', `${-vbWidth / 2} ${-vbHeight / 2} ${vbWidth} ${vbHeight}`);
   clone.setAttribute('width', String(size.width));
   clone.setAttribute('height', String(size.height));
